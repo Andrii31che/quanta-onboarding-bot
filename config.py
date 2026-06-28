@@ -34,9 +34,23 @@ def _get_ids(name: str):
     out = []
     for part in raw.split(","):
         part = part.strip()
-        if part:
+        if not part:
+            continue
+        try:
             out.append(int(part))
+        except ValueError:
+            raise ValueError(f"{name} должен быть списком числовых ID через запятую, "
+                             f"некорректное значение: {part!r}")
     return out
+
+
+def _get_float(name: str, default: str):
+    """Прочитать float-переменную с понятной ошибкой вместо сырого traceback."""
+    raw = os.environ.get(name, default).strip()
+    try:
+        return float(raw)
+    except ValueError:
+        raise ValueError(f"Переменная {name} должна быть числом, получено: {raw!r}")
 
 
 # ── Обязательное ─────────────────────────────────────────────────────────────
@@ -92,7 +106,7 @@ QLAB_URL = os.environ.get("QLAB_URL", "").strip()
 
 # ── Напоминание ──────────────────────────────────────────────────────────────
 # Через сколько часов после join слать 1 напоминание, если онбординг не пройден.
-REMINDER_HOURS = float(os.environ.get("REMINDER_HOURS", "24"))
+REMINDER_HOURS = _get_float("REMINDER_HOURS", "24")
 
 # ── Админы (резолв по user-id, через запятую) ────────────────────────────────
 # Могут пользоваться !affiliate / !stats даже без роли @helper.

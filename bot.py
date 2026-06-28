@@ -37,24 +37,30 @@ log = logging.getLogger("quanta-onboarding")
 # { "<user_id>": {joined_at, rules_ack, segment, member_granted, reminded} }
 state: dict = {}
 _state_lock = asyncio.Lock()
+# user_id'ы, для которых выдача @member сейчас в процессе — защита от
+# двойного гранта при повторной доставке реакции (TOCTOU между await).
+_granting: set = set()
 
 
 def load_state() -> None:
     global state
     try:
         with open(config.STATE_PATH, "r", encoding="utf-8") as f:
-            state = json.load(f)
+            loaded = json.load(f)
+        if not isinstance(loaded, dict):
+            raise ValueError(f"ожидался объект, получено {type(loaded).__name__}")
+        state = loaded
         log.info("Состояние загружено: %d записей", len(state))
     except FileNotFoundError:
         state = {}
         log.info("Файл состояния не найден — старт с пустого состояния")
-    except (json.JSONDecodeError, OSError) as e:
+    except (json.JSONDecodeError, ValueError, OSError) as e:
         state = {}
         log.warning("Не удалось прочитать состояние (%s) — старт с пустого", e)
 
 
 async def save_state() -> None:
-    """Атомарная запись через временный файл, под локом (без гонок)."""
+    """Атомарная запись через временный файл, под локом (защищает сам файл)."""
     async with _state_lock:
         try:
             os.makedirs(os.path.dirname(config.STATE_PATH) or ".", exist_ok=True)
@@ -148,16 +154,20 @@ def is_staff(member: discord.Member) -> bool:
 # ── Выдача @member, когда оба шага пройдены ───────────────────────────────────
 async def maybe_grant_member(member: discord.Member) -> None:
     rec = user_record(member.id)
-    if rec.get("member_granted"):
+    if rec.get("member_granted") or member.id in _granting:
         return
     if not (rec.get("rules_ack") and rec.get("segment")):
         return
-    granted = await add_role_by_name(member, config.MEMBER_ROLE)
-    if granted:
-        await remove_role_by_name(member, config.NEWCOMER_ROLE)
-        rec["member_granted"] = True
-        await save_state()
-        log.info("@member выдан: %s (сегмент=%s)", member, rec.get("segment"))
+    _granting.add(member.id)
+    try:
+        granted = await add_role_by_name(member, config.MEMBER_ROLE)
+        if granted:
+            await remove_role_by_name(member, config.NEWCOMER_ROLE)
+            rec["member_granted"] = True
+            await save_state()
+            log.info("@member выдан: %s (сегмент=%s)", member, rec.get("segment"))
+    finally:
+        _granting.discard(member.id)
 
 
 # ── Напоминание через REMINDER_HOURS ──────────────────────────────────────────
@@ -171,6 +181,11 @@ async def reminder_task(member: discord.Member, delay_seconds: float) -> None:
         return
     done = rec.get("rules_ack") and rec.get("segment")
     if rec.get("reminded") or done:
+        return
+    # юзер мог уйти за время ожидания — не слать напоминание вдогонку
+    if member.guild.get_member(member.id) is None:
+        rec["reminded"] = True
+        await save_state()
         return
     sent = await dm(member, content.REMINDER_DM)
     rec["reminded"] = True
@@ -202,20 +217,23 @@ async def resume_reminders() -> None:
             continue
         try:
             joined = datetime.datetime.fromisoformat(rec["joined_at"])
-        except (ValueError, TypeError):
-            continue
-        member = None
-        for guild in client.guilds:
-            if config.GUILD_ID and guild.id != config.GUILD_ID:
+            if joined.tzinfo is None:
+                joined = joined.replace(tzinfo=datetime.timezone.utc)
+            member = None
+            for guild in client.guilds:
+                if config.GUILD_ID and guild.id != config.GUILD_ID:
+                    continue
+                member = guild.get_member(int(key))
+                if member:
+                    break
+            if member is None:
                 continue
-            member = guild.get_member(int(key))
-            if member:
-                break
-        if member is None:
+            elapsed = (now - joined).total_seconds()
+            schedule_reminder(member, delay - elapsed)
+            resumed += 1
+        except (ValueError, TypeError) as e:
+            log.warning("Пропускаю запись %s в resume_reminders: %s", key, e)
             continue
-        elapsed = (now - joined).total_seconds()
-        schedule_reminder(member, delay - elapsed)
-        resumed += 1
     if resumed:
         log.info("Восстановлено напоминаний: %d", resumed)
 
@@ -227,6 +245,10 @@ async def on_ready():
     log.info("Гильдии: %s", [g.name for g in client.guilds])
     if config.GUILD_ID and not any(g.id == config.GUILD_ID for g in client.guilds):
         log.warning("GUILD_ID=%s — бот не состоит в этой гильдии!", config.GUILD_ID)
+    if not config.RULES_MESSAGE_ID:
+        log.warning("RULES_MESSAGE_ID не задан — реакция на правила НЕ обрабатывается (гейт мёртв)")
+    if not config.SEGMENT_MESSAGE_ID:
+        log.warning("SEGMENT_MESSAGE_ID не задан — выбор сегмента НЕ обрабатывается (гейт мёртв)")
     await resume_reminders()
 
 
@@ -285,10 +307,16 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
         if segment is None:
             return
         rec = user_record(member.id)
-        first_choice = rec.get("segment") is None
+        prev_segment = rec.get("segment")
+        first_choice = prev_segment is None
         rec["segment"] = segment
         await save_state()
-        # роль-тег сегмента (если есть на сервере)
+        # роль-тег сегмента (если есть на сервере); при смене — снять прежнюю,
+        # чтобы не копились stale-теги (сегмент = один, спека §4)
+        if prev_segment and prev_segment != segment:
+            old_role = config.SEGMENT_ROLE.get(prev_segment)
+            if old_role:
+                await remove_role_by_name(member, old_role)
         seg_role = config.SEGMENT_ROLE.get(segment)
         if seg_role:
             await add_role_by_name(member, seg_role)
@@ -306,18 +334,19 @@ async def on_message(message: discord.Message):
         return
     if not message.content.startswith("!"):
         return
+    # отсекаем чужие гильдии сразу; ЛС (message.guild is None) оставляем для !faq
+    if message.guild is not None and config.GUILD_ID and message.guild.id != config.GUILD_ID:
+        return
 
     content_lower = message.content.strip()
 
-    # !faq [тема]
+    # !faq [тема] — для всех, в т.ч. в ЛС с ботом
     if content_lower == "!faq" or content_lower.startswith("!faq "):
         await handle_faq(message)
         return
 
-    # дальше — только для гильдии и для staff
+    # дальше — только в гильдии и для staff
     if message.guild is None:
-        return
-    if config.GUILD_ID and message.guild.id != config.GUILD_ID:
         return
 
     if content_lower.startswith("!affiliate"):
@@ -371,9 +400,12 @@ async def handle_stats(message: discord.Message):
     """Срез онбординга для хелперов (спека §6)."""
     if not is_staff(message.author):
         return
-    total = len(state)
-    passed = sum(1 for r in state.values() if r.get("rules_ack") and r.get("segment"))
-    members = sum(1 for r in state.values() if r.get("member_granted"))
+    # реальные join'ы — те, чей вход бот зафиксировал (joined_at задан);
+    # реакции pre-existing участников (joined_at=None) метрику не инфлейтят
+    joined = [r for r in state.values() if r.get("joined_at")]
+    total = len(joined)
+    passed = sum(1 for r in joined if r.get("rules_ack") and r.get("segment"))
+    members = sum(1 for r in joined if r.get("member_granted"))
     by_segment = {}
     for r in state.values():
         seg = r.get("segment")
