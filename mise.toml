@@ -1,0 +1,6 @@
+# Disable mise's GitHub attestation verification for Python.
+# python-build-standalone publishes attestations only for the very newest
+# CPython releases — pinned versions (e.g. 3.12.7) fail otherwise.
+# Without this file, Railway builds fail at "install mise packages: python".
+[settings]
+python.github_attestations = false
