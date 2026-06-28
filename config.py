@@ -78,6 +78,12 @@ SEGMENT_MESSAGE_ID = _get_int("SEGMENT_MESSAGE_ID")
 # Эмодзи подтверждения правил.
 RULES_EMOJI = os.environ.get("RULES_EMOJI", "✅")
 
+# ── Выбор языка (reaction-role флагами) ──────────────────────────────────────
+# Сообщение в #start-here с флагами 🇷🇺/🇺🇦/🇬🇧; бот запоминает язык юзера
+# и шлёт ему value-DM / напоминания на нём. Не выбран — DEFAULT_LANG (ru).
+LANG_MESSAGE_ID = _get_int("LANG_MESSAGE_ID")
+LANG_EMOJI = {"🇷🇺": "ru", "🇺🇦": "uk", "🇬🇧": "en"}
+
 # ── Сегменты: эмодзи → внутренний ключ (порядок и ярлыки по спеке §1) ─────────
 SEGMENT_EMOJI = {
     "🎨": "creator",        # Контент-создатель

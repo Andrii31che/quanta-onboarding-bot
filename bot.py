@@ -77,6 +77,7 @@ def user_record(user_id: int) -> dict:
     if key not in state:
         state[key] = {
             "joined_at": None,
+            "lang": None,
             "rules_ack": False,
             "segment": None,
             "member_granted": False,
@@ -187,7 +188,8 @@ async def reminder_task(member: discord.Member, delay_seconds: float) -> None:
         rec["reminded"] = True
         await save_state()
         return
-    sent = await dm(member, content.REMINDER_DM)
+    lang = rec.get("lang") or content.DEFAULT_LANG
+    sent = await dm(member, content.REMINDER_DM[lang])
     rec["reminded"] = True
     await save_state()
     if sent:
@@ -290,6 +292,17 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
 
     emoji = str(payload.emoji)
 
+    # выбор языка (флаг) — запоминаем, на нём шлём дальнейшие DM
+    if config.LANG_MESSAGE_ID and payload.message_id == config.LANG_MESSAGE_ID:
+        lang = config.LANG_EMOJI.get(emoji)
+        if lang:
+            rec = user_record(member.id)
+            if rec.get("lang") != lang:
+                rec["lang"] = lang
+                await save_state()
+                log.info("Язык=%s: %s", lang, member)
+        return
+
     # rules-ack
     if config.RULES_MESSAGE_ID and payload.message_id == config.RULES_MESSAGE_ID:
         if emoji == config.RULES_EMOJI:
@@ -322,8 +335,9 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
             await add_role_by_name(member, seg_role)
         # value-DM шлём только при первом выборе (без спама при переключении)
         if first_choice:
-            await dm(member, content.value_dm(segment, config.DEMO_URL, config.QLAB_URL))
-            log.info("Сегмент=%s, value-DM → %s", segment, member)
+            lang = rec.get("lang") or content.DEFAULT_LANG
+            await dm(member, content.value_dm(segment, lang, config.DEMO_URL, config.QLAB_URL))
+            log.info("Сегмент=%s (lang=%s), value-DM → %s", segment, lang, member)
         await maybe_grant_member(member)
         return
 
@@ -358,21 +372,31 @@ async def on_message(message: discord.Message):
 
 
 # ── Команды ──────────────────────────────────────────────────────────────────
+def _faq_lang(message: discord.Message, arg: str) -> str:
+    """Язык FAQ: сохранённый выбор юзера, иначе эвристика по тексту запроса."""
+    rec = state.get(str(message.author.id))
+    if rec and rec.get("lang"):
+        return rec["lang"]
+    has_cyr = any("Ѐ" <= c <= "ӿ" for c in arg)
+    has_lat = any("a" <= c <= "z" for c in arg)
+    if has_lat and not has_cyr:
+        return "en"
+    return content.DEFAULT_LANG  # кириллица без явного выбора → ru
+
+
 async def handle_faq(message: discord.Message):
     arg = message.content[len("!faq"):].strip().lower()
+    lang = _faq_lang(message, arg)
+    topics_dict = content.FAQ_TOPICS[lang]
     if not arg:
-        topics = ", ".join(t["title"] for t in content.FAQ_TOPICS.values())
-        await message.reply(
-            "Темы FAQ: " + topics + "\nНапример: `!faq оплата`"
-        )
+        topics = ", ".join(t["title"] for t in topics_dict.values())
+        await message.reply(content.FAQ_LIST_PROMPT[lang].format(topics=topics))
         return
-    matches = []
-    for topic in content.FAQ_TOPICS.values():
-        if any(alias in arg for alias in topic["aliases"]):
-            matches.append(topic)
+    matches = [t for t in topics_dict.values()
+               if any(alias in arg for alias in t["aliases"])]
     if not matches:
-        topic_names = ", ".join(t["title"] for t in content.FAQ_TOPICS.values())
-        await message.reply(content.FAQ_FALLBACK.format(topics=topic_names))
+        topic_names = ", ".join(t["title"] for t in topics_dict.values())
+        await message.reply(content.FAQ_FALLBACK[lang].format(topics=topic_names))
         return
     # до 3 совпадений, чтобы не заспамить
     reply = "\n\n".join(f"**{t['title']}**\n{t['answer']}" for t in matches[:3])

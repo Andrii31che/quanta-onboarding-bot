@@ -5,6 +5,10 @@
 доступ к чатам. Бот шлёт сегментный value-DM, напоминает раз через 24 ч,
 отвечает на `!faq` и даёт хелперам вручную выдавать `@affiliate`.
 
+**Языки:** RU / UK / EN. Юзер выбирает язык реакцией-флагом 🇷🇺/🇺🇦/🇬🇧 в
+`#start-here` — value-DM, напоминания и `!faq` приходят на нём. Авто-DM при
+входе — триязычный (язык ещё не выбран). Без выбора — RU (для `!faq` на латинице — EN).
+
 **Спека:** `quanta-docs/03-execution/growth/discord-onboarding-bot-spec-2026-06-16.md`
 **Задачи:** Plane GROWTH-5 (бот) + GROWTH-10 (`!faq`).
 **Стек:** discord.py 2.3.2, Python 3.12. Деплой: Railway worker.
@@ -40,10 +44,11 @@
 - **Перетащить роль бота ВЫШЕ** ролей `newcomer/member/affiliate` в
   Server Settings → Roles (иначе бот не сможет их выдавать — это самая частая
   причина «бот молчит»).
-- В `#start-here` запостить сообщение с правилами и сообщение выбора сегмента,
-  скопировать их Message ID (Developer Mode → ПКМ → Copy Message ID) →
-  вписать в `RULES_MESSAGE_ID` и `SEGMENT_MESSAGE_ID`.
-  Под сегмент-сообщение добавить реакции 🎨💼🚀📱👀.
+- В `#start-here` запостить ТРИ якорных сообщения и скопировать их Message ID
+  (Developer Mode → ПКМ → Copy Message ID):
+  - правила → `RULES_MESSAGE_ID` (под ним реакция ✅)
+  - выбор языка → `LANG_MESSAGE_ID` (добавить реакции 🇷🇺 🇺🇦 🇬🇧)
+  - выбор сегмента → `SEGMENT_MESSAGE_ID` (добавить реакции 🎨 💼 🚀 📱 👀)
 
 ---
 
