@@ -64,11 +64,26 @@ python bot.py
 
 ## Деплой на Railway
 
+**Статус (2026-06-28):** задеплоен и онлайн как `Quanta#0953`. Проект Railway
+`quanta-onboarding-bot` (id `b7ca9edc-9d4d-4391-b0cd-cea611092ce6`), задеплоен
+через `railway up` из локальной папки (без GitHub). `DISCORD_TOKEN` задан в
+Railway Variables. Бот подключён к Gateway, но `Guilds=[]` — ещё не на сервере
+(ждёт инвайта owner'ом, см. блок выше). `.railwayignore` исключает `.env`,
+`.git`, `data/state.json` и кэш из загрузки.
+
+Передеплой / обновление:
+
+```bash
+railway up        # из папки репо (нужен railway login)
+```
+
+Альтернатива — деплой из GitHub:
+
 1. Залить репо на GitHub (`Andrii31che/quanta-onboarding-bot`).
-2. Railway → New Project → Deploy from GitHub repo → выбрать репо.
+2. Railway → проект → Deploy from GitHub repo → выбрать репо.
 3. Service → **Variables** → внести значения из `env.example`
    (как минимум `DISCORD_TOKEN`, `GUILD_ID`, `RULES_MESSAGE_ID`,
-   `SEGMENT_MESSAGE_ID`).
+   `LANG_MESSAGE_ID`, `SEGMENT_MESSAGE_ID`).
 4. Деплой стартует сам (worker по `Procfile` / `railway.json`).
 
 ---
