@@ -2,19 +2,20 @@
 Тексты онбординг-бота Quanta. Customer-facing. Языки: RU / UK / EN.
 
 Источник RU (НЕ переписывать формулировки — прошли forbidden-scan #606):
-- авто-DM:       discord-onboarding-bot-spec-2026-06-16.md §3.3
-- 5 value-DM:    sales-lead-valuedm-faq-2026-06-16.md §A
-- FAQ:           sales-lead-valuedm-faq-2026-06-16.md §B (выверено по Module 12)
-- REMINDER_DM:   bot-authored (нет в источниках); проверен на #606 вручную.
+- 5 value-DM (цели): discord-valuedm-goals-2026-07-13.ru.md
+- FAQ:               sales-lead-valuedm-faq-2026-06-16.md §B (выверено по Module 12)
+- авто-DM / REMINDER / якоря / QID: bot-authored по спеке
+  discord-build-spec-2026-07-13.ru.md §5, проверены на #606 вручную.
 
-UK/EN — переводы RU-оригинала (GROWTH-5/10 AC: RU+UK+EN). Сохранены факты
-(минимум вывода $10, кредиты 12 мес, USDC/BEP20, помесячная лицензия, возврата
-нет) и запреты #606 на каждом языке: без «пирамида/пассивный доход/реферал/
-заработок/гарантированно/успей» (и их UK/EN эквивалентов), без имён
-AI-провайдеров, «лицензия/license» не «подписка/subscription».
+UK/EN — переводы RU-оригинала. Сохранены факты (минимум вывода $10, кредиты
+12 мес, USDC/BEP20, помесячная лицензия, возврата нет) и запреты #606 на
+каждом языке: без «пирамида/пассивный доход/реферал/гарантированно/успей»
+(и их UK/EN эквивалентов), без имён AI-провайдеров, «лицензия/license»
+не «подписка/subscription». Названия каналов — русские во всех языках
+(бот оформляет их Discord-упоминаниями, спека value-DM).
 
 Язык юзера хранится в state (rec["lang"]); выбирается реакцией-флагом
-🇷🇺/🇺🇦/🇬🇧 в #start-here. Пока не выбран — DEFAULT_LANG.
+🇷🇺/🇺🇦/🇬🇧 в #старт. Пока не выбран — DEFAULT_LANG.
 """
 
 LANGS = ("ru", "uk", "en")
@@ -23,178 +24,268 @@ DEFAULT_LANG = "ru"
 # ── Шаг [2]: авто-DM при join — триязычный (язык ещё не выбран) ───────────────
 AUTO_DM = (
     "🇷🇺 Привет 👋 Рад, что заглянул(а) в Quanta. Чтобы открыть доступ к чатам, "
-    "зайди в **#start-here** и сделай пару шагов: выбери язык (флаг), поставь ✅ "
-    "под правилами и отметь, чем занимаешься. После этого добро пожаловать внутрь.\n\n"
+    "зайди в **#старт** и сделай пару шагов: выбери язык (флаг), поставь ✅ "
+    "под правилами и отметь свою цель — можно несколько. После этого добро "
+    "пожаловать внутрь.\n\n"
     "🇺🇦 Привіт 👋 Радий, що завітав(ла) у Quanta. Щоб відкрити доступ до чатів, "
-    "зайди в **#start-here** і зроби кілька кроків: обери мову (прапор), постав ✅ "
-    "під правилами та познач, чим займаєшся. Після цього ласкаво просимо досередини.\n\n"
+    "зайди в **#старт** і зроби кілька кроків: обери мову (прапор), постав ✅ "
+    "під правилами та познач свою ціль — можна кілька. Після цього ласкаво "
+    "просимо досередини.\n\n"
     "🇬🇧 Hi 👋 Glad you stopped by Quanta. To unlock the chats, head to "
-    "**#start-here** and take a couple of steps: pick your language (flag), tick ✅ "
-    "under the rules, and mark what you do. Then welcome inside."
+    "**#старт** and take a couple of steps: pick your language (flag), tick ✅ "
+    "under the rules, and mark your goal — you can pick several. Then welcome "
+    "inside."
 )
 
 # ── Напоминание через 24ч (1 раз), по языку ──────────────────────────────────
 REMINDER_DM = {
     "ru": (
-        "Напоминаю про вход в Quanta 🙂 Остались два коротких шага в **#start-here**: "
-        "✅ под правилами и выбор, чем ты занимаешься. После них откроются чаты. "
-        "Если что-то непонятно — просто ответь на это сообщение."
+        "Напоминаю про вход в Quanta 🙂 Остались два коротких шага в **#старт**: "
+        "✅ под правилами и выбор цели. После них откроются чаты. "
+        "Если что-то непонятно — набери здесь `!faq`, подскажу."
     ),
     "uk": (
-        "Нагадую про вхід у Quanta 🙂 Лишилися два короткі кроки в **#start-here**: "
-        "✅ під правилами та вибір, чим ти займаєшся. Після них відкриються чати. "
-        "Якщо щось незрозуміло — просто дай відповідь на це повідомлення."
+        "Нагадую про вхід у Quanta 🙂 Лишилися два короткі кроки в **#старт**: "
+        "✅ під правилами та вибір цілі. Після них відкриються чати. "
+        "Якщо щось незрозуміло — набери тут `!faq`, підкажу."
     ),
     "en": (
-        "A quick nudge about joining Quanta 🙂 Two short steps left in **#start-here**: "
-        "tick ✅ under the rules and pick what you do. The chats open right after. "
-        "If anything's unclear, just reply to this message."
+        "A quick nudge about joining Quanta 🙂 Two short steps left in **#старт**: "
+        "tick ✅ under the rules and pick your goal. The chats open right after. "
+        "If anything's unclear, type `!faq` here and I'll help."
     ),
 }
 
-# ── Заглушки для незаполненных ссылок (не выдумываем URL) ─────────────────────
-DEMO_FALLBACK = {
-    "ru": "ссылку на демо скину отдельно — пока загляни в канал, подскажу",
-    "uk": "посилання на демо скину окремо — поки що зазирни в канал, підкажу",
-    "en": "I'll send the demo link separately — for now hop into the channel, I'll guide you",
-}
-QLAB_FALLBACK = {
-    "ru": "ссылку на Q-Lab скину отдельно — спроси в #questions",
-    "uk": "посилання на Q-Lab скину окремо — запитай у #questions",
-    "en": "I'll send the Q-Lab link separately — ask in #questions",
+# ── Заглушка для незаполненной ссылки продукта (не выдумываем URL) ────────────
+PRODUCT_FALLBACK = {
+    "ru": "ссылку пришлю отдельно",
+    "uk": "посилання надішлю окремо",
+    "en": "I'll send the link separately",
 }
 
 
-def _demo(lang: str, demo_url: str) -> str:
-    return demo_url if demo_url else DEMO_FALLBACK[lang]
-
-
-def _qlab(lang: str, qlab_url: str) -> str:
-    return qlab_url if qlab_url else QLAB_FALLBACK[lang]
-
-
-# ── 5 сегментных value-DM × 3 языка ──────────────────────────────────────────
+# ── 5 value-DM под цели × 3 языка ────────────────────────────────────────────
+# Тексты — discord-valuedm-goals-2026-07-13.ru.md (forbidden-scan PASS,
+# НЕ переписывать формулировки). Плейсхолдеры {ch_*} бот резолвит в
+# Discord-упоминания каналов (<#id>), поэтому имена каналов одинаковые
+# (русские) во всех языках.
 _VALUE_DM = {
     "ru": {
-        "creator": (
-            "Привет! Рад, что ты с нами 👋 Здесь ты говоришь «сделай пост про X» — "
-            "и получаешь готовый материал под каждую соцсеть, в твоём стиле, "
-            "а не черновик.\n"
-            "Два шага: 1) глянь 2-мин демо → {demo}; "
-            "2) загляни в #wins, покажу, с чего начать."
+        "earn": (
+            "Привет! Рад, что ты здесь 👋 У тебя есть личная ссылка Quanta — "
+            "по ней люди заходят в экосистему, а тебе идёт комиссия с их оплат. "
+            "Два шага: 1) забери свою ссылку в кабинете; "
+            "2) загляни в {ch_earn} — покажу, как привести первых."
         ),
-        "expert": (
-            "Привет! Тебе больше не нужно быть себе копирайтером и маркетологом — "
-            "инструмент готовит контент и тексты под продажу, а ты возвращаешься "
-            "к своему делу.\n"
-            "Два шага: 1) демо под твою задачу → {demo}; "
-            "2) бесплатное обучение в Q-Lab → {qlab}."
+        "company": (
+            "Привет! Если у тебя своя команда или сеть — Quanta заводится под "
+            "твой бренд: посты, видео и материалы под твою компанию. "
+            "Два шага: 1) напиши, что за компания; "
+            "2) подключим её и дадим тебе закрытый канал для твоих людей."
         ),
-        "entrepreneur": (
-            "Привет! Вместо десятка отдельных подписок — одна система: контент, "
-            "видео, тексты в одном месте, по одной лицензии. Включаешь сегодня.\n"
-            "Два шага: 1) посмотри, что она убирает из твоего «зоопарка» → {demo}; "
-            "2) вопросы — в #general, отвечу."
+        "business": (
+            "Привет! Вместо десятка отдельных сервисов — одна система: контент, "
+            "видео и тексты под твой бизнес в одном месте. "
+            "Два шага: 1) глянь, что она умеет → {product}; "
+            "2) вопросы — в {ch_general}, подскажу с чего начать."
         ),
-        "blogger": (
-            "Привет! Здесь ты наконец монетизируешь аудиторию: контент под все "
-            "площадки за минуты + выплаты в крипте, без блокировок по региону.\n"
-            "Два шага: 1) глянь, как это выглядит → {demo}; "
-            "2) забери свою ссылку и загляни в #affiliate."
+        "learn": (
+            "Привет! Здесь можно бесплатно освоить AI — на реальных "
+            "инструментах, а не в теории. "
+            "Два шага: 1) зайди в {ch_learn} (Q-Lab); "
+            "2) сделай первое задание — дальше подскажу, куда двигаться."
         ),
-        "watcher": (
-            "Привет! Здесь можно осмотреться без обязательств. Хочешь — бесплатно "
-            "поучись работать с AI в Q-Lab, на реальных инструментах.\n"
-            "Два шага: 1) Q-Lab → {qlab}; "
-            "2) если что-то зацепит — спроси в #questions, подскажу."
+        "watch": (
+            "Привет! Осмотрись без обязательств. Хочешь — бесплатно попробуй "
+            "AI в {ch_learn}, глянь в {ch_wins}, что делают другие. "
+            "Если что-то зацепит — спроси в {ch_questions}, подскажу."
         ),
     },
     "uk": {
-        "creator": (
-            "Привіт! Радий, що ти з нами 👋 Тут ти кажеш «зроби пост про X» — "
-            "і отримуєш готовий матеріал під кожну соцмережу, у твоєму стилі, "
-            "а не чернетку.\n"
-            "Два кроки: 1) глянь 2-хв демо → {demo}; "
-            "2) зазирни в #wins, покажу, з чого почати."
+        "earn": (
+            "Привіт! Радий, що ти тут 👋 У тебе є особисте посилання Quanta — "
+            "за ним люди заходять в екосистему, а тобі йде комісія з їхніх "
+            "оплат. Два кроки: 1) забери своє посилання в кабінеті; "
+            "2) зазирни в {ch_earn} — покажу, як привести перших."
         ),
-        "expert": (
-            "Привіт! Тобі більше не треба бути сам собі копірайтером і маркетологом — "
-            "інструмент готує контент і тексти під продаж, а ти повертаєшся "
-            "до своєї справи.\n"
-            "Два кроки: 1) демо під твоє завдання → {demo}; "
-            "2) безкоштовне навчання в Q-Lab → {qlab}."
+        "company": (
+            "Привіт! Якщо в тебе своя команда чи мережа — Quanta налаштовується "
+            "під твій бренд: пости, відео та матеріали під твою компанію. "
+            "Два кроки: 1) напиши, що за компанія; "
+            "2) підключимо її та дамо тобі закритий канал для твоїх людей."
         ),
-        "entrepreneur": (
-            "Привіт! Замість десятка окремих підписок — одна система: контент, "
-            "відео, тексти в одному місці, за однією ліцензією. Вмикаєш сьогодні.\n"
-            "Два кроки: 1) подивись, що вона прибирає з твого «зоопарку» → {demo}; "
-            "2) питання — у #general, відповім."
+        "business": (
+            "Привіт! Замість десятка окремих сервісів — одна система: контент, "
+            "відео й тексти під твій бізнес в одному місці. "
+            "Два кроки: 1) поглянь, що вона вміє → {product}; "
+            "2) питання — в {ch_general}, підкажу з чого почати."
         ),
-        "blogger": (
-            "Привіт! Тут ти нарешті монетизуєш аудиторію: контент під усі "
-            "майданчики за хвилини + виплати в крипті, без блокувань за регіоном.\n"
-            "Два кроки: 1) глянь, як це виглядає → {demo}; "
-            "2) забери своє посилання і зазирни в #affiliate."
+        "learn": (
+            "Привіт! Тут можна безкоштовно опанувати AI — на реальних "
+            "інструментах, а не в теорії. "
+            "Два кроки: 1) зайди в {ch_learn} (Q-Lab); "
+            "2) зроби перше завдання — далі підкажу, куди рухатися."
         ),
-        "watcher": (
-            "Привіт! Тут можна роззирнутися без зобов'язань. Хочеш — безкоштовно "
-            "повчись працювати з AI у Q-Lab, на реальних інструментах.\n"
-            "Два кроки: 1) Q-Lab → {qlab}; "
-            "2) якщо щось зачепить — запитай у #questions, підкажу."
+        "watch": (
+            "Привіт! Роздивись без зобов'язань. Хочеш — безкоштовно спробуй "
+            "AI в {ch_learn}, поглянь у {ch_wins}, що роблять інші. "
+            "Якщо щось зачепить — запитай у {ch_questions}, підкажу."
         ),
     },
     "en": {
-        "creator": (
-            "Hi! Glad you're with us 👋 Here you say \"make a post about X\" — "
-            "and get ready-to-publish material for each social network, in your "
-            "voice, not a rough draft.\n"
-            "Two steps: 1) watch the 2-min demo → {demo}; "
-            "2) drop into #wins and I'll show you where to start."
+        "earn": (
+            "Hey! Glad you're here 👋 You have a personal Quanta link — people "
+            "join the ecosystem through it, and you earn a commission on their "
+            "payments. Two steps: 1) grab your link in your dashboard; "
+            "2) drop into {ch_earn} — I'll show you how to bring your first ones."
         ),
-        "expert": (
-            "Hi! You no longer have to be your own copywriter and marketer — "
-            "the tool prepares content and sales copy, and you get back "
-            "to your actual work.\n"
-            "Two steps: 1) a demo for your case → {demo}; "
-            "2) free training in Q-Lab → {qlab}."
+        "company": (
+            "Hey! If you have your own team or network — Quanta sets up under "
+            "your brand: posts, videos, and materials for your company. "
+            "Two steps: 1) tell me what company it is; "
+            "2) we'll connect it and give you a private channel for your people."
         ),
-        "entrepreneur": (
-            "Hi! Instead of a dozen separate subscriptions — one system: content, "
-            "video, copy in one place, under a single license. Switch it on today.\n"
-            "Two steps: 1) see what it removes from your tool zoo → {demo}; "
-            "2) questions go to #general, I'll answer."
+        "business": (
+            "Hey! Instead of a dozen separate services — one system: content, "
+            "video, and copy for your business in one place. "
+            "Two steps: 1) see what it can do → {product}; "
+            "2) questions — in {ch_general}, I'll help you start."
         ),
-        "blogger": (
-            "Hi! Here you finally monetize your audience: content for every "
-            "platform in minutes + payouts in crypto, no regional blocks.\n"
-            "Two steps: 1) see how it looks → {demo}; "
-            "2) grab your link and drop into #affiliate."
+        "learn": (
+            "Hey! Here you can learn AI for free — on real tools, not in "
+            "theory. Two steps: 1) head to {ch_learn} (Q-Lab); "
+            "2) do the first task — I'll guide you from there."
         ),
-        "watcher": (
-            "Hi! You can look around with no commitment. If you like — learn to "
-            "work with AI for free in Q-Lab, on real tools.\n"
-            "Two steps: 1) Q-Lab → {qlab}; "
-            "2) if something clicks — ask in #questions, I'll help."
+        "watch": (
+            "Hey! Look around, no strings attached. If you like — try AI for "
+            "free in {ch_learn}, check {ch_wins} to see what others make. "
+            "If something clicks — ask in {ch_questions}, I'll help."
         ),
     },
 }
 
-
-def value_dm(segment: str, lang: str = DEFAULT_LANG,
-             demo_url: str = "", qlab_url: str = "") -> str:
-    lang = lang if lang in LANGS else DEFAULT_LANG
-    template = _VALUE_DM[lang][segment]
-    return template.format(demo=_demo(lang, demo_url), qlab=_qlab(lang, qlab_url))
-
-
-# Ярлыки сегментов (для логов/статистики) — на дефолтном языке.
-SEGMENT_LABEL = {
-    "creator": "Контент-создатель 🎨",
-    "expert": "Эксперт / консультант 💼",
-    "entrepreneur": "Предприниматель 🚀",
-    "blogger": "Блогер 📱",
-    "watcher": "Просто смотрю 👀",
+# Дефолтные плейсхолдеры каналов (если гильдия/канал не найдены — просто текст).
+_CH_DEFAULTS = {
+    "ch_earn": "#заработок",
+    "ch_general": "#общее",
+    "ch_learn": "#обучение",
+    "ch_wins": "#результаты",
+    "ch_questions": "#вопросы",
 }
+
+
+def value_dm(goal: str, lang: str = DEFAULT_LANG,
+             product_url: str = "", channels: dict | None = None) -> str:
+    """channels: плейсхолдер → упоминание канала ("<#id>"); без него — "#имя"."""
+    lang = lang if lang in LANGS else DEFAULT_LANG
+    template = _VALUE_DM[lang][goal]
+    fields = dict(_CH_DEFAULTS)
+    fields.update(channels or {})
+    fields["product"] = product_url if product_url else PRODUCT_FALLBACK[lang]
+    return template.format(**fields)
+
+
+# Ярлыки целей (для логов/статистики) — на дефолтном языке.
+GOAL_LABEL = {
+    "earn": "Заработать на рекомендациях 💰",
+    "company": "Развернуть на компанию/сеть 🏢",
+    "business": "Автоматизировать бизнес 🚀",
+    "learn": "Научиться AI 🧠",
+    "watch": "Осмотреться 👀",
+}
+
+
+# ── 💰: запрос Quanta ID → заявка в #заявки (спека §8, Phase 1) ───────────────
+QID_REQUEST_DM = {
+    "ru": (
+        "Чтобы открыть тебе {ch_earn}, пришли ответом на это сообщение свой "
+        "Quanta ID — логин или почту из кабинета. Я передам заявку команде, "
+        "она проверит, что партнёрка активна."
+    ),
+    "uk": (
+        "Щоб відкрити тобі {ch_earn}, надішли у відповідь на це повідомлення "
+        "свій Quanta ID — логін або пошту з кабінету. Я передам заявку команді, "
+        "вона перевірить, що партнерка активна."
+    ),
+    "en": (
+        "To open {ch_earn} for you, reply to this message with your Quanta ID — "
+        "the login or email from your dashboard. I'll pass the request to the "
+        "team; they'll check that your partner link is active."
+    ),
+}
+
+QID_INVALID_DM = {
+    "ru": (
+        "Хм, это не похоже на Quanta ID 🙂 Пришли одной строкой логин или почту "
+        "из кабинета — без пробелов. Если пока не актуально — просто "
+        "проигнорируй это сообщение."
+    ),
+    "uk": (
+        "Хм, це не схоже на Quanta ID 🙂 Надішли одним рядком логін або пошту "
+        "з кабінету — без пробілів. Якщо поки не актуально — просто "
+        "проігноруй це повідомлення."
+    ),
+    "en": (
+        "Hmm, that doesn't look like a Quanta ID 🙂 Send the login or email "
+        "from your dashboard in one line, no spaces. If it's not relevant "
+        "right now — just ignore this message."
+    ),
+}
+
+QID_RECEIVED_DM = {
+    "ru": (
+        "Принял, заявка ушла команде ✅ Как только проверят — тебе выдадут роль, "
+        "и {ch_earn} откроется. Обычно это не дольше рабочего дня."
+    ),
+    "uk": (
+        "Прийняв, заявка пішла команді ✅ Щойно перевірять — тобі видадуть роль, "
+        "і {ch_earn} відкриється. Зазвичай це не довше робочого дня."
+    ),
+    "en": (
+        "Got it, the request went to the team ✅ Once they check it, you'll get "
+        "the role and {ch_earn} opens up. Usually takes less than a working day."
+    ),
+}
+
+# Пост в служебный #заявки (team-facing, RU).
+APPLICATION_POST = (
+    "📥 Заявка на {ch_earn}: {mention} (`{name}`, id {user_id}) · "
+    "Quanta ID: `{qid}`\n"
+    "Проверь в админке, что партнёрка активна → выдай роль @affiliate "
+    "(ПКМ по нику → Roles)."
+)
+
+
+# ── Якорные сообщения для #старт (постятся ботом в SETUP_MODE) ────────────────
+ANCHOR_RULES = (
+    "**Добро пожаловать в Quanta 👋**\n"
+    "Здесь делают контент, осваивают AI на практике и растут вместе с "
+    "продуктом.\n\n"
+    "**Правила простые:**\n"
+    "1. Уважение к людям — без оскорблений и токсичности.\n"
+    "2. Без спама и рекламы сторонних проектов.\n"
+    "3. Без обещаний дохода и финансовых гарантий.\n"
+    "4. Вопросы по продукту — в #вопросы; личное по аккаунту/платежу — через "
+    "поддержку (#поддержка).\n\n"
+    "Согласен(на) — поставь ✅ под этим сообщением. Это первый из двух шагов."
+)
+
+ANCHOR_LANG = (
+    "**Выбери язык / Обери мову / Pick your language**\n"
+    "На нём я буду писать тебе в личку.\n\n"
+    "🇷🇺 — русский · 🇺🇦 — українська · 🇬🇧 — English"
+)
+
+ANCHOR_GOALS = (
+    "**Шаг второй: с чем ты пришёл? Выбери цель — можно несколько.**\n\n"
+    "💰 — заработать на рекомендациях\n"
+    "🏢 — развернуть Quanta на свою компанию/сеть\n"
+    "🚀 — автоматизировать свой бизнес\n"
+    "🧠 — научиться AI на практике\n"
+    "👀 — осмотреться\n\n"
+    "Жми реакцию под этим сообщением — я открою тебе каналы и напишу в личку, "
+    "с чего начать."
+)
 
 
 # ── FAQ × 3 языка (§B, выверено по Module 12) ─────────────────────────────────
@@ -325,7 +416,7 @@ FAQ_TOPICS = {
             "aliases": ["куда писать", "куда обратит", "где спросит", "куда задать"],
             "title": "Куда писать",
             "answer": (
-                "Вопрос по продукту/оплате — пиши в #questions, там отвечаем и ответ "
+                "Вопрос по продукту/оплате — пиши в #вопросы, там отвечаем и ответ "
                 "виден всем. Личные вещи по аккаунту/платежу — в канал поддержки "
                 "с хешем транзакции. Так быстрее и не теряется."
             ),
@@ -454,7 +545,7 @@ FAQ_TOPICS = {
             "aliases": ["куди писати", "куди звернут", "де запитати", "куди поставити"],
             "title": "Куди писати",
             "answer": (
-                "Питання щодо продукту/оплати — пиши в #questions, там відповідаємо "
+                "Питання щодо продукту/оплати — пиши в #вопросы, там відповідаємо "
                 "і відповідь бачать усі. Особисте щодо акаунта/платежу — в канал "
                 "підтримки з хешем транзакції. Так швидше і не губиться."
             ),
@@ -583,7 +674,7 @@ FAQ_TOPICS = {
             "aliases": ["where to write", "where to ask", "where do i ask", "where to post"],
             "title": "Where to write",
             "answer": (
-                "Product/payment questions — post in #questions, we answer there and the "
+                "Product/payment questions — post in #вопросы, we answer there and the "
                 "answer is visible to everyone. Personal account/payment matters — the "
                 "support channel with the transaction hash. Faster and nothing gets lost."
             ),
@@ -594,13 +685,13 @@ FAQ_TOPICS = {
 FAQ_FALLBACK = {
     "ru": ("Не нашёл точную тему. Доступные: {topics}.\n"
            "Например: `!faq оплата`. Если вопрос личный (аккаунт/платёж) — лучше "
-           "в #questions или в канал поддержки."),
+           "в #вопросы или в канал поддержки."),
     "uk": ("Не знайшов точну тему. Доступні: {topics}.\n"
            "Наприклад: `!faq оплата`. Якщо питання особисте (акаунт/платіж) — краще "
-           "в #questions або в канал підтримки."),
+           "в #вопросы або в канал підтримки."),
     "en": ("Couldn't find an exact topic. Available: {topics}.\n"
            "For example: `!faq payment`. If it's personal (account/payment) — better "
-           "in #questions or the support channel."),
+           "in #вопросы or the support channel."),
 }
 
 FAQ_LIST_PROMPT = {

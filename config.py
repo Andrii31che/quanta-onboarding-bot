@@ -1,15 +1,15 @@
 """
 Конфигурация онбординг-бота Quanta (Discord).
 
-Всё, что зависит от конкретного сервера (имена ролей/каналов, ID
-rules/segment-сообщений, ссылки), задаётся через переменные окружения —
-чтобы тот, у кого есть admin-доступ к серверу, заполнил значения без правки кода.
+Всё, что зависит от конкретного сервера (имена ролей/каналов, ID якорных
+сообщений, ссылки), задаётся через переменные окружения — чтобы тот, у кого
+есть admin-доступ к серверу, заполнил значения без правки кода.
 
 Бот ищет роли и каналы ПО ИМЕНИ внутри гильдии, поэтому ID-каналов знать
-не обязательно — достаточно, чтобы роли/каналы с этими именами существовали
-(их создаёт owner по community-discord-redesign §3-4 = задача GROWTH-4).
+не обязательно — достаточно, чтобы роли/каналы с этими именами существовали.
+В SETUP_MODE бот сам создаёт/переименовывает их (см. setup_server.py).
 
-Спека: quanta-docs/03-execution/growth/discord-onboarding-bot-spec-2026-06-16.md
+Спека: quanta-docs/03-execution/growth/discord-build-spec-2026-07-13.ru.md
 """
 
 import os
@@ -65,50 +65,49 @@ NEWCOMER_ROLE = os.environ.get("NEWCOMER_ROLE", "newcomer")
 MEMBER_ROLE = os.environ.get("MEMBER_ROLE", "member")
 AFFILIATE_ROLE = os.environ.get("AFFILIATE_ROLE", "affiliate")
 HELPER_ROLE = os.environ.get("HELPER_ROLE", "helper")
+AMBASSADOR_ROLE = os.environ.get("AMBASSADOR_ROLE", "ambassador")
 
-# ── Каналы (по имени; без префикса #) ────────────────────────────────────────
-START_HERE_CHANNEL = os.environ.get("START_HERE_CHANNEL", "start-here")
+# Существующие КОМАНДНЫЕ роли (через запятую, «как есть» — спека §3): setup
+# вплетает их в тиры «пишет команда» (#анонсы, #поддержка, #обучение) и в
+# служебный #заявки. Пусто → эти каналы доступны команде только через
+# permission Administrator (setup напишет предупреждение в лог).
+TEAM_ROLES = [s.strip() for s in os.environ.get("TEAM_ROLES", "").split(",") if s.strip()]
 
-# ── Сообщения-якоря в #start-here ────────────────────────────────────────────
-# ID сообщения с правилами (реакция ✅ = rules-ack) и ID сообщения выбора
-# сегмента (reaction-role 🎨💼🚀📱👀). Owner создаёт сообщения и вставляет ID.
+# ── Каналы (по имени; без префикса #; спека §4 — имена на русском) ────────────
+START_CHANNEL = os.environ.get("START_CHANNEL", "старт")
+APPLICATIONS_CHANNEL = os.environ.get("APPLICATIONS_CHANNEL", "заявки")
+EARN_CHANNEL = os.environ.get("EARN_CHANNEL", "заработок")
+GENERAL_CHANNEL = os.environ.get("GENERAL_CHANNEL", "общее")
+LEARN_CHANNEL = os.environ.get("LEARN_CHANNEL", "обучение")
+WINS_CHANNEL = os.environ.get("WINS_CHANNEL", "результаты")
+QUESTIONS_CHANNEL = os.environ.get("QUESTIONS_CHANNEL", "вопросы")
+
+# ── Сообщения-якоря в #старт ─────────────────────────────────────────────────
+# ID сообщения с правилами (реакция ✅ = rules-ack), выбора языка (флаги) и
+# выбора целей (💰🏢🚀🧠👀). В SETUP_MODE бот сам постит якоря и печатает ID
+# в лог — затем их вносят в переменные и передеплоивают.
 RULES_MESSAGE_ID = _get_int("RULES_MESSAGE_ID")
-SEGMENT_MESSAGE_ID = _get_int("SEGMENT_MESSAGE_ID")
+LANG_MESSAGE_ID = _get_int("LANG_MESSAGE_ID")
+GOALS_MESSAGE_ID = _get_int("GOALS_MESSAGE_ID")
 
 # Эмодзи подтверждения правил.
 RULES_EMOJI = os.environ.get("RULES_EMOJI", "✅")
 
 # ── Выбор языка (reaction-role флагами) ──────────────────────────────────────
-# Сообщение в #start-here с флагами 🇷🇺/🇺🇦/🇬🇧; бот запоминает язык юзера
-# и шлёт ему value-DM / напоминания на нём. Не выбран — DEFAULT_LANG (ru).
-LANG_MESSAGE_ID = _get_int("LANG_MESSAGE_ID")
 LANG_EMOJI = {"🇷🇺": "ru", "🇺🇦": "uk", "🇬🇧": "en"}
 
-# ── Сегменты: эмодзи → внутренний ключ (порядок и ярлыки по спеке §1) ─────────
-SEGMENT_EMOJI = {
-    "🎨": "creator",        # Контент-создатель
-    "💼": "expert",         # Эксперт / консультант
-    "🚀": "entrepreneur",   # Предприниматель
-    "📱": "blogger",        # Блогер
-    "👀": "watcher",        # Просто смотрю
+# ── Цели на входе (спека §2): эмодзи → внутренний ключ. Можно несколько. ──────
+GOAL_EMOJI = {
+    "💰": "earn",      # заработать на рекомендациях → #заработок (по партнёрке)
+    "🏢": "company",   # развернуть Quanta на свою компанию/сеть → приватный канал
+    "🚀": "business",  # автоматизировать свой бизнес → #общее + материалы
+    "🧠": "learn",     # научиться AI на практике → #обучение
+    "👀": "watch",     # осмотреться → всё открытое
 }
 
-# Опционально: ключ сегмента → имя роли-тега (для сегментной аналитики/рассылок).
-# Если роль с таким именем есть на сервере — бот её выдаст; если нет — просто
-# запишет сегмент в state и пойдёт дальше (роль не обязательна).
-SEGMENT_ROLE = {
-    "creator": os.environ.get("ROLE_CREATOR", "seg-creator"),
-    "expert": os.environ.get("ROLE_EXPERT", "seg-expert"),
-    "entrepreneur": os.environ.get("ROLE_ENTREPRENEUR", "seg-entrepreneur"),
-    "blogger": os.environ.get("ROLE_BLOGGER", "seg-blogger"),
-    "watcher": os.environ.get("ROLE_WATCHER", "seg-watcher"),
-}
-
-# ── Ссылки-плейсхолдеры для value-DM (заполняются по мере готовности) ─────────
-# Статус на 2026-06-16 (спека): demo пока нет (после GROWTH-6/14), Q-Lab —
-# ссылка Андрея. Пока не заданы — подставляется нейтральная заглушка.
-DEMO_URL = os.environ.get("DEMO_URL", "").strip()
-QLAB_URL = os.environ.get("QLAB_URL", "").strip()
+# ── Ссылка для value-DM цели 🚀 («глянь, что она умеет») ─────────────────────
+# Пока не задана — бот подставляет нейтральную заглушку (не выдумываем URL).
+PRODUCT_URL = os.environ.get("PRODUCT_URL", "").strip()
 
 # ── Напоминание ──────────────────────────────────────────────────────────────
 # Через сколько часов после join слать 1 напоминание, если онбординг не пройден.
@@ -117,6 +116,13 @@ REMINDER_HOURS = _get_float("REMINDER_HOURS", "24")
 # ── Админы (резолв по user-id, через запятую) ────────────────────────────────
 # Могут пользоваться !affiliate / !stats даже без роли @helper.
 ADMIN_IDS = _get_ids("ADMIN_IDS")
+
+# ── SETUP_MODE ───────────────────────────────────────────────────────────────
+# "1" → при старте бот один раз прогоняет setup_server.run(): роли, каналы
+# с тирами записи (§4), грандфазер @member (§6), якоря в #старт (лог ID).
+# Идемпотентно: существующее не трогается повторно. После успешного прогона
+# переменную вернуть в "0"/убрать.
+SETUP_MODE = os.environ.get("SETUP_MODE", "").strip() == "1"
 
 # ── Хранилище состояния ──────────────────────────────────────────────────────
 STATE_PATH = os.environ.get("STATE_PATH", "data/state.json")

@@ -1,25 +1,30 @@
 """
 Quanta Discord — онбординг-гейт бот (Phase 1).
 
-Реализует discord-onboarding-bot-spec-2026-06-16.md:
-  join → @newcomer + авто-DM → ✅ правила (rules-ack) → выбор сегмента
-  (reaction-role) → сегментный value-DM → @member → доступ к tier-2 каналам.
-  + 24ч напоминание (1 раз), команды !faq, !affiliate (Фаза 1), !stats.
+Реализует discord-build-spec-2026-07-13.ru.md (§2, §5, §8):
+  join → @newcomer + авто-DM → ✅ правила (rules-ack) → выбор ЦЕЛЕЙ
+  💰🏢🚀🧠👀 (можно несколько; value-DM по каждой) → @member → доступ к
+  каналам участника. Цель 💰: бот просит Quanta ID в ЛС и постит заявку
+  в служебный #заявки (ручная выдача @affiliate, Phase 1).
+  + 24ч напоминание (1 раз), команды !faq, !affiliate (Phase 1), !stats.
+  + SETUP_MODE=1: разовая сборка сервера (роли, каналы §4, грандфазер
+  @member, якоря в #старт) — см. setup_server.py.
 
 Стек: discord.py + Python 3.12. Деплой: Railway worker (см. Procfile).
-State: data/state.json (переживает рестарт; таймеры напоминаний
-восстанавливаются на старте — см. resume_reminders).
+State: data/state.json (переживает рестарт процесса; на Railway файловая
+система эфемерна — состояние теряется при редеплое, known limit Phase 1).
 
 Privileged intents (включить в Discord Developer Portal → Bot → Privileged
 Gateway Intents): SERVER MEMBERS INTENT и MESSAGE CONTENT INTENT.
-Права бота на сервере: Manage Roles (роль бота — ВЫШЕ управляемых ролей
-в иерархии), плюс возможность видеть #start-here.
+Права бота на сервере: Manage Roles + Manage Channels (для SETUP_MODE),
+роль бота — ВЫШЕ управляемых ролей в иерархии.
 """
 
 import asyncio
 import json
 import logging
 import os
+import re
 
 import discord
 
@@ -34,12 +39,15 @@ log = logging.getLogger("quanta-onboarding")
 
 
 # ── Состояние ────────────────────────────────────────────────────────────────
-# { "<user_id>": {joined_at, rules_ack, segment, member_granted, reminded} }
+# { "<user_id>": {joined_at, lang, rules_ack, goals[], pending_qid, qid,
+#                 member_granted, reminded} }
 state: dict = {}
 _state_lock = asyncio.Lock()
 # user_id'ы, для которых выдача @member сейчас в процессе — защита от
 # двойного гранта при повторной доставке реакции (TOCTOU между await).
 _granting: set = set()
+# SETUP_MODE: on_ready срабатывает и при reconnect — сетап гоняем один раз.
+_setup_started = False
 
 
 def load_state() -> None:
@@ -79,11 +87,17 @@ def user_record(user_id: int) -> dict:
             "joined_at": None,
             "lang": None,
             "rules_ack": False,
-            "segment": None,
+            "goals": [],
+            "pending_qid": False,
+            "qid": None,
             "member_granted": False,
             "reminded": False,
         }
-    return state[key]
+    # legacy-записи (до перехода сегменты → цели) могли не иметь новых полей
+    rec = state[key]
+    rec.setdefault("goals", [])
+    rec.setdefault("pending_qid", False)
+    return rec
 
 
 # ── Discord client ───────────────────────────────────────────────────────────
@@ -152,12 +166,35 @@ def is_staff(member: discord.Member) -> bool:
     return find_role(member.guild, config.HELPER_ROLE) in member.roles
 
 
+def main_guild():
+    """Рабочая гильдия: по GUILD_ID, иначе первая (бот живёт на одном сервере)."""
+    if config.GUILD_ID:
+        return client.get_guild(config.GUILD_ID)
+    return client.guilds[0] if client.guilds else None
+
+
+def channel_mentions(guild: discord.Guild) -> dict:
+    """Плейсхолдер value-DM → упоминание канала <#id>; канала нет — "#имя"."""
+    mapping = {
+        "ch_earn": config.EARN_CHANNEL,
+        "ch_general": config.GENERAL_CHANNEL,
+        "ch_learn": config.LEARN_CHANNEL,
+        "ch_wins": config.WINS_CHANNEL,
+        "ch_questions": config.QUESTIONS_CHANNEL,
+    }
+    out = {}
+    for key, name in mapping.items():
+        ch = discord.utils.get(guild.text_channels, name=name)
+        out[key] = ch.mention if ch else "#" + name
+    return out
+
+
 # ── Выдача @member, когда оба шага пройдены ───────────────────────────────────
 async def maybe_grant_member(member: discord.Member) -> None:
     rec = user_record(member.id)
     if rec.get("member_granted") or member.id in _granting:
         return
-    if not (rec.get("rules_ack") and rec.get("segment")):
+    if not (rec.get("rules_ack") and rec.get("goals")):
         return
     _granting.add(member.id)
     try:
@@ -166,21 +203,37 @@ async def maybe_grant_member(member: discord.Member) -> None:
             await remove_role_by_name(member, config.NEWCOMER_ROLE)
             rec["member_granted"] = True
             await save_state()
-            log.info("@member выдан: %s (сегмент=%s)", member, rec.get("segment"))
+            log.info("@member выдан: %s (цели=%s)", member, rec.get("goals"))
     finally:
         _granting.discard(member.id)
 
 
 # ── Напоминание через REMINDER_HOURS ──────────────────────────────────────────
+# Кому уже запланировано (защита от дублей: reconnect повторно зовёт on_ready →
+# resume_reminders; без этого юзер получил бы напоминание дважды).
+_reminder_scheduled: set = set()
+
+
 async def reminder_task(member: discord.Member, delay_seconds: float) -> None:
     try:
-        await asyncio.sleep(delay_seconds)
-    except asyncio.CancelledError:
-        return
+        try:
+            await asyncio.sleep(delay_seconds)
+        except asyncio.CancelledError:
+            return
+        await _reminder_fire(member)
+    finally:
+        _reminder_scheduled.discard(member.id)
+
+
+async def _reminder_fire(member: discord.Member) -> None:
     rec = state.get(str(member.id))
     if not rec:
         return
-    done = rec.get("rules_ack") and rec.get("segment")
+    # done: прошёл НОВЫЙ онбординг (цели) ИЛИ старый (segment из legacy-state),
+    # ИЛИ @member уже выдан — иначе стартовый resume раздал бы «напоминания»
+    # всей старой базе (state может пережить деплой при volume/локальном запуске)
+    done = rec.get("member_granted") or (
+        rec.get("rules_ack") and (rec.get("goals") or rec.get("segment")))
     if rec.get("reminded") or done:
         return
     # юзер мог уйти за время ожидания — не слать напоминание вдогонку
@@ -197,6 +250,9 @@ async def reminder_task(member: discord.Member, delay_seconds: float) -> None:
 
 
 def schedule_reminder(member: discord.Member, delay_seconds: float) -> None:
+    if member.id in _reminder_scheduled:
+        return  # уже запланировано (resume после reconnect и т.п.) — не дублируем
+    _reminder_scheduled.add(member.id)
     if delay_seconds < 0:
         delay_seconds = 0
     client.loop.create_task(reminder_task(member, delay_seconds))
@@ -214,7 +270,9 @@ async def resume_reminders() -> None:
     now = datetime.datetime.now(datetime.timezone.utc)
     resumed = 0
     for key, rec in list(state.items()):
-        done = rec.get("rules_ack") and rec.get("segment")
+        # та же done-логика, что в _reminder_fire (legacy-segment учитывается)
+        done = rec.get("member_granted") or (
+            rec.get("rules_ack") and (rec.get("goals") or rec.get("segment")))
         if rec.get("reminded") or done or not rec.get("joined_at"):
             continue
         try:
@@ -243,14 +301,23 @@ async def resume_reminders() -> None:
 # ── События ──────────────────────────────────────────────────────────────────
 @client.event
 async def on_ready():
+    global _setup_started
     log.info("Бот запущен: %s", client.user)
-    log.info("Гильдии: %s", [g.name for g in client.guilds])
+    log.info("Гильдии: %s", [(g.name, g.id) for g in client.guilds])
     if config.GUILD_ID and not any(g.id == config.GUILD_ID for g in client.guilds):
         log.warning("GUILD_ID=%s — бот не состоит в этой гильдии!", config.GUILD_ID)
     if not config.RULES_MESSAGE_ID:
         log.warning("RULES_MESSAGE_ID не задан — реакция на правила НЕ обрабатывается (гейт мёртв)")
-    if not config.SEGMENT_MESSAGE_ID:
-        log.warning("SEGMENT_MESSAGE_ID не задан — выбор сегмента НЕ обрабатывается (гейт мёртв)")
+    if not config.GOALS_MESSAGE_ID:
+        log.warning("GOALS_MESSAGE_ID не задан — выбор цели НЕ обрабатывается (гейт мёртв)")
+    if config.SETUP_MODE and not _setup_started:
+        _setup_started = True
+        guild = main_guild()
+        if guild is None:
+            log.error("SETUP_MODE=1, но гильдия не найдена — бот приглашён на сервер?")
+        else:
+            import setup_server
+            client.loop.create_task(setup_server.run(client, guild))
     await resume_reminders()
 
 
@@ -265,11 +332,19 @@ async def on_member_join(member: discord.Member):
     rec = user_record(member.id)
     rec["joined_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
     rec["reminded"] = False
+    # rejoin: при выходе Discord снял роли — сбрасываем флаг «выдано»,
+    # иначе maybe_grant_member навсегда выходит на первой проверке (lockout)
+    rec["member_granted"] = False
     await save_state()
 
     await add_role_by_name(member, config.NEWCOMER_ROLE)
-    await dm(member, content.AUTO_DM)
-    schedule_reminder(member, config.REMINDER_HOURS * 3600)
+    # прошёл онбординг раньше (state пережил его выход) — восстановить сразу
+    await maybe_grant_member(member)
+    if rec.get("member_granted"):
+        log.info("Rejoin: %s — @member восстановлен без повторного онбординга", member)
+    else:
+        await dm(member, content.AUTO_DM)
+        schedule_reminder(member, config.REMINDER_HOURS * 3600)
     log.info("Join: %s (id=%s)", member, member.id)
 
 
@@ -314,30 +389,42 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
             await maybe_grant_member(member)
         return
 
-    # выбор сегмента (reaction-role)
-    if config.SEGMENT_MESSAGE_ID and payload.message_id == config.SEGMENT_MESSAGE_ID:
-        segment = config.SEGMENT_EMOJI.get(emoji)
-        if segment is None:
+    # выбор цели (💰🏢🚀🧠👀) — можно несколько; value-DM по каждой новой
+    if config.GOALS_MESSAGE_ID and payload.message_id == config.GOALS_MESSAGE_ID:
+        goal = config.GOAL_EMOJI.get(emoji)
+        if goal is None:
             return
         rec = user_record(member.id)
-        prev_segment = rec.get("segment")
-        first_choice = prev_segment is None
-        rec["segment"] = segment
-        await save_state()
-        # роль-тег сегмента (если есть на сервере); при смене — снять прежнюю,
-        # чтобы не копились stale-теги (сегмент = один, спека §4)
-        if prev_segment and prev_segment != segment:
-            old_role = config.SEGMENT_ROLE.get(prev_segment)
-            if old_role:
-                await remove_role_by_name(member, old_role)
-        seg_role = config.SEGMENT_ROLE.get(segment)
-        if seg_role:
-            await add_role_by_name(member, seg_role)
-        # value-DM шлём только при первом выборе (без спама при переключении)
-        if first_choice:
+        goals = rec["goals"]
+        if goal not in goals:
+            goals.append(goal)
+            await save_state()
             lang = rec.get("lang") or content.DEFAULT_LANG
-            await dm(member, content.value_dm(segment, lang, config.DEMO_URL, config.QLAB_URL))
-            log.info("Сегмент=%s (lang=%s), value-DM → %s", segment, lang, member)
+            mentions = channel_mentions(guild)
+            await dm(member, content.value_dm(goal, lang, config.PRODUCT_URL, mentions))
+            if goal == "earn":
+                # 💰: просим Quanta ID (спека §8). Флаг заявки — только если
+                # вопрос реально доставлен, иначе любое будущее ЛС боту
+                # превратилось бы в «Quanta ID» без контекста.
+                asked = await dm(member, content.QID_REQUEST_DM[lang].format(
+                    ch_earn=mentions["ch_earn"]))
+                if asked:
+                    rec["pending_qid"] = True
+                    await save_state()
+                else:
+                    log.warning("💰: не смог спросить Quanta ID у %s (ЛС закрыты)", member)
+            log.info("Цель=%s (lang=%s), value-DM → %s", goal, lang, member)
+        elif (goal == "earn" and not rec.get("pending_qid") and not rec.get("qid")):
+            # rescue: 💰 уже выбрана, но Quanta ID так и не спросили (ЛС были
+            # закрыты) — повторный клик реакции = повторная попытка спросить
+            lang = rec.get("lang") or content.DEFAULT_LANG
+            mentions = channel_mentions(guild)
+            asked = await dm(member, content.QID_REQUEST_DM[lang].format(
+                ch_earn=mentions["ch_earn"]))
+            if asked:
+                rec["pending_qid"] = True
+                await save_state()
+                log.info("💰 rescue: повторно спросил Quanta ID у %s", member)
         await maybe_grant_member(member)
         return
 
@@ -347,12 +434,15 @@ async def on_message(message: discord.Message):
     if message.author.bot:
         return
     if not message.content.startswith("!"):
+        # ЛС без команды: возможно, это ответ с Quanta ID на заявку 💰
+        if message.guild is None:
+            await maybe_capture_qid(message)
         return
     # отсекаем чужие гильдии сразу; ЛС (message.guild is None) оставляем для !faq
     if message.guild is not None and config.GUILD_ID and message.guild.id != config.GUILD_ID:
         return
 
-    content_lower = message.content.strip()
+    content_lower = message.content.strip().lower()
 
     # !faq [тема] — для всех, в т.ч. в ЛС с ботом
     if content_lower == "!faq" or content_lower.startswith("!faq "):
@@ -369,6 +459,52 @@ async def on_message(message: discord.Message):
     if content_lower == "!stats":
         await handle_stats(message)
         return
+
+
+# ── 💰-заявка: Quanta ID из ЛС → пост в #заявки (спека §8, Phase 1) ───────────
+async def maybe_capture_qid(message: discord.Message) -> None:
+    rec = state.get(str(message.author.id))
+    if not rec or not rec.get("pending_qid"):
+        return
+    qid = message.content.strip()
+    lang = rec.get("lang") or content.DEFAULT_LANG
+    # валидный Quanta ID = одна строка без пробелов (логин или почта);
+    # на невалидное отвечаем, а не молчим — иначе юзер уверен, что подал заявку
+    if not qid or len(qid) > 100 or any(c.isspace() for c in qid):
+        await dm(message.author, content.QID_INVALID_DM[lang])
+        return
+    guild = main_guild()
+    if guild is None:
+        log.error("Заявка 💰 от %s: гильдия не найдена (проверь GUILD_ID)", message.author)
+        return
+    ch = discord.utils.get(guild.text_channels, name=config.APPLICATIONS_CHANNEL)
+    if ch is None:
+        log.error("Канал #%s не найден — заявка от %s (qid=%s) НЕ доставлена",
+                  config.APPLICATIONS_CHANNEL, message.author, qid)
+        return  # юзеру не подтверждаем, чтобы не врать про отправку
+    mentions = channel_mentions(guild)
+    member = guild.get_member(message.author.id)
+    # флаг снимаем ДО поста: два быстрых ЛС подряд не должны дать две заявки
+    rec["pending_qid"] = False
+    rec["qid"] = qid
+    await save_state()
+    try:
+        await ch.send(content.APPLICATION_POST.format(
+            ch_earn=mentions["ch_earn"],
+            mention=member.mention if member else str(message.author),
+            name=str(message.author),
+            user_id=message.author.id,
+            qid=qid,
+        ))
+    except discord.HTTPException as e:
+        log.error("Не удалось запостить заявку в #%s: %s", config.APPLICATIONS_CHANNEL, e)
+        # вернуть флаг, чтобы юзер мог прислать ID повторно
+        rec["pending_qid"] = True
+        rec["qid"] = None
+        await save_state()
+        return
+    await dm(message.author, content.QID_RECEIVED_DM[lang].format(ch_earn=mentions["ch_earn"]))
+    log.info("Заявка 💰: %s → #%s (qid=%s)", message.author, config.APPLICATIONS_CHANNEL, qid)
 
 
 # ── Команды ──────────────────────────────────────────────────────────────────
@@ -407,11 +543,18 @@ async def handle_affiliate(message: discord.Message):
     """Фаза 1 (интерим): ручная выдача @affiliate хелпером/админом."""
     if not is_staff(message.author):
         return
-    if not message.mentions:
+    # упоминания берём из ТЕКСТА команды: message.mentions при reply-пинге
+    # включает автора цитируемого сообщения — роль улетела бы не тому
+    targets = []
+    for uid in re.findall(r"<@!?(\d+)>", message.content):
+        m = message.guild.get_member(int(uid))
+        if m is not None and m not in targets:
+            targets.append(m)
+    if not targets:
         await message.reply("Использование: `!affiliate @пользователь`")
         return
     granted_to = []
-    for target in message.mentions:
+    for target in targets:
         if await add_role_by_name(target, config.AFFILIATE_ROLE):
             granted_to.append(target.mention)
     if granted_to:
@@ -428,23 +571,25 @@ async def handle_stats(message: discord.Message):
     # реакции pre-existing участников (joined_at=None) метрику не инфлейтят
     joined = [r for r in state.values() if r.get("joined_at")]
     total = len(joined)
-    passed = sum(1 for r in joined if r.get("rules_ack") and r.get("segment"))
+    passed = sum(1 for r in joined if r.get("rules_ack") and r.get("goals"))
     members = sum(1 for r in joined if r.get("member_granted"))
-    by_segment = {}
+    by_goal = {}
     for r in state.values():
-        seg = r.get("segment")
-        if seg:
-            by_segment[seg] = by_segment.get(seg, 0) + 1
+        for g in r.get("goals") or []:
+            by_goal[g] = by_goal.get(g, 0) + 1
+    pending = sum(1 for r in state.values() if r.get("pending_qid"))
     pct = (passed / total * 100) if total else 0
-    seg_lines = "\n".join(
-        f"  • {content.SEGMENT_LABEL.get(k, k)}: {v}" for k, v in by_segment.items()
+    goal_lines = "\n".join(
+        f"  • {content.GOAL_LABEL.get(k, k)}: {v}" for k, v in by_goal.items()
     ) or "  (пока нет)"
     await message.reply(
         f"**Онбординг (с момента последнего сброса state)**\n"
         f"Всего join: {total}\n"
-        f"Прошли гейт (правила + сегмент): {passed} ({pct:.0f}%)\n"
+        f"Прошли гейт (правила + цель): {passed} ({pct:.0f}%)\n"
         f"Получили @{config.MEMBER_ROLE}: {members}\n"
-        f"Сегментный срез:\n{seg_lines}"
+        f"Ждём Quanta ID для 💰-заявки: {pending}\n"
+        f"Срез по целям (сумма может быть > числа людей — цели множественные):\n"
+        f"{goal_lines}"
     )
 
 
