@@ -131,11 +131,16 @@ def _overwrites(tier: str, guild: discord.Guild, roles: dict,
         for t in team_roles:
             ow[t] = _team_overwrite()
     elif tier == "earn":
-        # читают участники, пишут @affiliate (+команда — лидерборд и т.п.)
+        # читают участники, пишут @affiliate (+команда — лидерборд и т.п.).
+        # @member: явно закрываем и ветки — иначе «писать нельзя» обходится
+        # созданием треда (create_public_threads/send_messages_in_threads —
+        # отдельные права в Discord; ловушка «боковой двери»)
         ow = {
             everyone: deny_view,
             member: discord.PermissionOverwrite(
-                view_channel=True, send_messages=False, add_reactions=True,
+                view_channel=True, send_messages=False,
+                send_messages_in_threads=False, create_public_threads=False,
+                create_private_threads=False, add_reactions=True,
                 read_message_history=True),
             affiliate: discord.PermissionOverwrite(
                 view_channel=True, send_messages=True,
@@ -231,14 +236,22 @@ async def grandfather_members(guild: discord.Guild, roles: dict) -> None:
     """§6: всем текущим не-ботам разом выдать @member — никого не запирать.
 
     Вызывается ДО применения тиров к каналам, иначе на время прогона весь
-    сервер ослеп бы (deny @everyone ложится раньше, чем у людей есть роль)."""
+    сервер ослеп бы (deny @everyone ложится раньше, чем у людей есть роль).
+
+    ВАЖНО (защита при ПОВТОРНОМ прогоне): пропускаем тех, кто прямо сейчас
+    в онбординге (@newcomer). Грандфазер — разовая миграция СТАРЫХ; повторный
+    setup не должен выдавать @member тем, кто ещё проходит гейт, иначе он их
+    протолкнёт мимо онбординга."""
     member_role = roles.get(config.MEMBER_ROLE)
     if member_role is None:
         log.error("Грандфазер пропущен: роли @%s нет", config.MEMBER_ROLE)
         return
+    newcomer_role = roles.get(config.NEWCOMER_ROLE)
     todo = [m for m in guild.members
-            if not m.bot and member_role not in m.roles]
-    log.info("Грандфазер: выдаю @%s %d участникам…", config.MEMBER_ROLE, len(todo))
+            if not m.bot and member_role not in m.roles
+            and (newcomer_role is None or newcomer_role not in m.roles)]
+    log.info("Грандфазер: выдаю @%s %d участникам (в онбординге пропущены)…",
+             config.MEMBER_ROLE, len(todo))
     done = 0
     for m in todo:
         try:
