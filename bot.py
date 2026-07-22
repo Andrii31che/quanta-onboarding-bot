@@ -48,6 +48,8 @@ _state_lock = asyncio.Lock()
 _granting: set = set()
 # SETUP_MODE: on_ready срабатывает и при reconnect — сетап гоняем один раз.
 _setup_started = False
+# CLEANUP_MODE: та же защита от повторного запуска при reconnect.
+_cleanup_started = False
 
 
 def load_state() -> None:
@@ -318,6 +320,15 @@ async def on_ready():
         else:
             import setup_server
             client.loop.create_task(setup_server.run(client, guild))
+    global _cleanup_started
+    if config.CLEANUP_MODE and not _cleanup_started:
+        _cleanup_started = True
+        guild = main_guild()
+        if guild is None:
+            log.error("CLEANUP_MODE=%s, но гильдия не найдена", config.CLEANUP_MODE)
+        else:
+            import cleanup_server
+            client.loop.create_task(cleanup_server.run(client, guild))
     await resume_reminders()
 
 
