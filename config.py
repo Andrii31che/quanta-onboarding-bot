@@ -81,6 +81,9 @@ GENERAL_CHANNEL = os.environ.get("GENERAL_CHANNEL", "общее")
 LEARN_CHANNEL = os.environ.get("LEARN_CHANNEL", "обучение")
 WINS_CHANNEL = os.environ.get("WINS_CHANNEL", "результаты")
 QUESTIONS_CHANNEL = os.environ.get("QUESTIONS_CHANNEL", "вопросы")
+MATERIALS_CHANNEL = os.environ.get("MATERIALS_CHANNEL", "материалы-quanta")
+ANNOUNCEMENTS_CHANNEL = os.environ.get("ANNOUNCEMENTS_CHANNEL", "анонсы")
+SUPPORT_CHANNEL = os.environ.get("SUPPORT_CHANNEL", "поддержка")
 
 # ── Сообщения-якоря в #старт ─────────────────────────────────────────────────
 # ID сообщения с правилами (реакция ✅ = rules-ack), выбора языка (флаги) и
@@ -104,6 +107,30 @@ GOAL_EMOJI = {
     "🧠": "learn",     # научиться AI на практике → #обучение
     "👀": "watch",     # осмотреться → всё открытое
 }
+
+# ── Роли-маркеры целей (нативный онбординг, часть 3) ─────────────────────────
+# Ответ опроса выдаёт роль → бот ловит событие и шлёт value-DM. 💰 — видимый
+# бейдж-статус (решение V 22.07), канал НЕ открывает (жёсткое условие №1).
+GOAL_ROLES = {
+    "earn": os.environ.get("GOAL_ROLE_EARN", "Партнёрка · на проверке"),
+    "company": os.environ.get("GOAL_ROLE_COMPANY", "цель-компания"),
+    "business": os.environ.get("GOAL_ROLE_BUSINESS", "цель-бизнес"),
+    "learn": os.environ.get("GOAL_ROLE_LEARN", "цель-обучение"),
+    "watch": os.environ.get("GOAL_ROLE_WATCH", "цель-осмотреться"),
+}
+GOAL_BY_ROLE = {name: goal for goal, name in GOAL_ROLES.items()}
+
+# ── Роли языка (вопрос 1 опроса; бот шлёт DM на языке роли) ──────────────────
+LANG_ROLES = {"lang-ru": "ru", "lang-uk": "uk", "lang-en": "en"}
+
+# ── Режим входа ──────────────────────────────────────────────────────────────
+# 0 — переходный: старый гейт на реакциях работает, @newcomer и 24ч-напоминание
+#     живут. 1 — нативная «Адаптация» включена и оттестирована: вход держит
+#     Discord, @newcomer и 24ч-напоминание упразднены (часть 3, порядок работ).
+NATIVE_ONBOARDING = os.environ.get("NATIVE_ONBOARDING", "0").strip() == "1"
+
+# ── Тикет-сервер поддержки (кнопка в #поддержка появится, когда задан URL) ────
+SUPPORT_INVITE_URL = os.environ.get("SUPPORT_INVITE_URL", "").strip()
 
 # ── Ссылка для value-DM цели 🚀 («глянь, что она умеет») ─────────────────────
 # Пока не задана — бот подставляет нейтральную заглушку (не выдумываем URL).

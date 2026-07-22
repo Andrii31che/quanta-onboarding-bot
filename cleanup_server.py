@@ -219,6 +219,65 @@ async def apply_deletions(client, guild: discord.Guild) -> None:
     log.info("=== APPLY-2 DONE ===")
 
 
+# ── HIDE_EARN: #заработок полностью скрыт (часть 2, чек-лист п.1) ────────────
+async def apply_hide_earn(client, guild: discord.Guild) -> None:
+    import setup_server
+    ch = discord.utils.get(guild.text_channels, name=config.EARN_CHANNEL)
+    if ch is None:
+        log.error("HIDE_EARN: #%s не найден", config.EARN_CHANNEL)
+        return
+    roles = {name: discord.utils.get(guild.roles, name=name)
+             for name in (config.MEMBER_ROLE, config.AFFILIATE_ROLE)}
+    plan = setup_server._overwrites("earn", guild, roles,
+                                    setup_server.resolve_team_roles(guild))
+    merged = dict(ch.overwrites)
+    merged.update(plan)
+    await ch.edit(overwrites=merged,
+                  reason="Quanta: #заработок скрыт полностью (часть 2, V 21.07)")
+    log.info("HIDE_EARN DONE: #%s видят только @%s и команда",
+             config.EARN_CHANNEL, config.AFFILIATE_ROLE)
+
+
+# ── CUTOVER: снос реакций-якорей, пост-указатель + кнопка-починка ────────────
+# Запускать ТОЛЬКО после зелёного теста нативной «Адаптации» (часть 3, п.3).
+async def apply_cutover(client, guild: discord.Guild) -> None:
+    import bot as botmod
+    ch = discord.utils.get(guild.text_channels, name=config.START_CHANNEL)
+    if ch is None:
+        log.error("CUTOVER: #%s не найден", config.START_CHANNEL)
+        return
+    # 1) удалить якоря «язык» и «цели» (правила остаются закрепом)
+    for var, mid in (("LANG_MESSAGE_ID", config.LANG_MESSAGE_ID),
+                     ("GOALS_MESSAGE_ID", config.GOALS_MESSAGE_ID)):
+        if not mid:
+            continue
+        try:
+            msg = await ch.fetch_message(mid)
+            await msg.delete()
+            log.info("CUTOVER: якорь %s удалён", var)
+        except discord.NotFound:
+            log.info("CUTOVER: якорь %s уже удалён", var)
+        except discord.HTTPException as e:
+            log.error("CUTOVER: не удалить якорь %s: %s", var, e)
+    # 2) пост-указатель с кнопкой-починкой (идемпотентно)
+    try:
+        pins = await ch.pins()
+        if not any(p.author.id == client.user.id and
+                   p.content.startswith("**Карта сервера") for p in pins):
+            msg = await ch.send(
+                botmod.fmt(botmod.content.START_POINTER,
+                           botmod.content.DEFAULT_LANG, guild),
+                view=botmod.FixView())
+            await msg.pin(reason="Quanta: пост-указатель (часть 3)")
+            log.info("CUTOVER: пост-указатель с кнопкой запощен и закреплён")
+        else:
+            log.info("CUTOVER: пост-указатель уже стоит")
+    except discord.HTTPException as e:
+        log.error("CUTOVER: указатель не встал: %s", e)
+    log.info("CUTOVER DONE. Дальше: NATIVE_ONBOARDING=1 в Railway (если ещё "
+             "не включён) и убери CLEANUP_MODE.")
+
+
 async def run(client, guild: discord.Guild) -> None:
     mode = config.CLEANUP_MODE
     if mode == "inventory":
@@ -227,5 +286,9 @@ async def run(client, guild: discord.Guild) -> None:
         await apply_renames(client, guild)
     elif mode == "apply2":
         await apply_deletions(client, guild)
+    elif mode == "hide_earn":
+        await apply_hide_earn(client, guild)
+    elif mode == "cutover":
+        await apply_cutover(client, guild)
     else:
         log.error("Неизвестный CLEANUP_MODE=%r", mode)

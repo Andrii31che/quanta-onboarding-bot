@@ -71,11 +71,15 @@ PRODUCT_FALLBACK = {
 # (русские) во всех языках.
 _VALUE_DM = {
     "ru": {
+        # 💰 — новая версия из discord-earnings-gate-2026-07-21 (канон V):
+        # канал скрыт, DM сам просит Quanta ID
         "earn": (
-            "Привет! Рад, что ты здесь 👋 У тебя есть личная ссылка Quanta — "
-            "по ней люди заходят в экосистему, а тебе идёт комиссия с их оплат. "
-            "Два шага: 1) забери свою ссылку в кабинете; "
-            "2) загляни в {ch_earn} — покажу, как привести первых."
+            "Привет! Рад, что ты здесь 👋 По твоей личной ссылке Quanta люди "
+            "заходят в экосистему, а тебе идёт комиссия с их оплат. Канал "
+            "{ch_earn} открыт тем, у кого активна партнёрка. Пришли мне сюда "
+            "свой Quanta ID (логин или почту) — проверю и открою. Нет "
+            "Quanta ID? Зарегистрируйся по ссылке того, кто тебя пригласил, "
+            "и возвращайся."
         ),
         "company": (
             "Привет! Если у тебя своя команда или сеть — Quanta заводится под "
@@ -103,10 +107,12 @@ _VALUE_DM = {
     },
     "uk": {
         "earn": (
-            "Привіт! Радий, що ти тут 👋 У тебе є особисте посилання Quanta — "
-            "за ним люди заходять в екосистему, а тобі йде комісія з їхніх "
-            "оплат. Два кроки: 1) забери своє посилання в кабінеті; "
-            "2) зазирни в {ch_earn} — покажу, як привести перших."
+            "Привіт! Радий, що ти тут 👋 За твоїм особистим посиланням Quanta "
+            "люди заходять в екосистему, а тобі йде комісія з їхніх оплат. "
+            "Канал {ch_earn} відкритий тим, у кого активна партнерка. Надішли "
+            "мені сюди свій Quanta ID (логін або пошту) — перевірю і відкрию. "
+            "Немає Quanta ID? Зареєструйся за посиланням того, хто тебе "
+            "запросив, і повертайся."
         ),
         "company": (
             "Привіт! Якщо в тебе своя команда чи мережа — Quanta налаштовується "
@@ -134,10 +140,12 @@ _VALUE_DM = {
     },
     "en": {
         "earn": (
-            "Hey! Glad you're here 👋 You have a personal Quanta link — people "
-            "join the ecosystem through it, and you earn a commission on their "
-            "payments. Two steps: 1) grab your link in your dashboard; "
-            "2) drop into {ch_earn} — I'll show you how to bring your first ones."
+            "Hey! Glad you're here 👋 People join the ecosystem through your "
+            "personal Quanta link, and you earn a commission on their payments. "
+            "The {ch_earn} channel is open to those with an active partner "
+            "program. Send me your Quanta ID here (login or email) — I'll "
+            "check and open it. No Quanta ID? Register via the link of the "
+            "person who invited you, and come back."
         ),
         "company": (
             "Hey! If you have your own team or network — Quanta sets up under "
@@ -171,6 +179,9 @@ _CH_DEFAULTS = {
     "ch_learn": "#обучение",
     "ch_wins": "#результаты",
     "ch_questions": "#вопросы",
+    "ch_materials": "#материалы-quanta",
+    "ch_ann": "#анонсы",
+    "ch_support": "#поддержка",
 }
 
 
@@ -234,17 +245,57 @@ QID_INVALID_DM = {
 
 QID_RECEIVED_DM = {
     "ru": (
-        "Принял, заявка ушла команде ✅ Как только проверят — тебе выдадут роль, "
-        "и {ch_earn} откроется. Обычно это не дольше рабочего дня."
+        "Принял! Проверка занимает до суток. Как только всё ок — {ch_earn} "
+        "появится у тебя в списке каналов, я напишу."
     ),
     "uk": (
-        "Прийняв, заявка пішла команді ✅ Щойно перевірять — тобі видадуть роль, "
-        "і {ch_earn} відкриється. Зазвичай це не довше робочого дня."
+        "Прийняв! Перевірка займає до доби. Щойно все ок — {ch_earn} "
+        "з'явиться у тебе в списку каналів, я напишу."
     ),
     "en": (
-        "Got it, the request went to the team ✅ Once they check it, you'll get "
-        "the role and {ch_earn} opens up. Usually takes less than a working day."
+        "Got it! The check takes up to a day. Once everything's fine — "
+        "{ch_earn} appears in your channel list, I'll message you."
     ),
+}
+
+# Доступ открыт (шлётся после выдачи @affiliate)
+ACCESS_OPENED_DM = {
+    "ru": (
+        "Готово: партнёрка активна, доступ открыт. Загляни в {ch_earn} — "
+        "там лидерборд и разборы, как приводить людей."
+    ),
+    "uk": (
+        "Готово: партнерка активна, доступ відкрито. Зазирни в {ch_earn} — "
+        "там лідерборд і розбори, як приводити людей."
+    ),
+    "en": (
+        "Done: your partner program is active, access is open. Check "
+        "{ch_earn} — the leaderboard and guides on bringing people are there."
+    ),
+}
+
+# Партнёрка не активирована (после проверки AC)
+NOT_ACTIVE_DM = {
+    "ru": (
+        "Пока не вижу активной партнёрки по этому Quanta ID. Активируй её "
+        "в кабинете — и отметь 💰 во вкладке «Каналы и роли» ещё раз."
+    ),
+    "uk": (
+        "Поки не бачу активної партнерки за цим Quanta ID. Активуй її "
+        "в кабінеті — і познач 💰 у вкладці «Канали та ролі» ще раз."
+    ),
+    "en": (
+        "I don't see an active partner program for this Quanta ID yet. "
+        "Activate it in your dashboard — and tick 💰 in the "
+        "\"Channels & Roles\" tab again."
+    ),
+}
+
+# «Уже выбрано» — повторное появление роли цели (без дублей заявок/DM)
+ALREADY_PICKED_DM = {
+    "ru": "Эта цель у тебя уже отмечена 👍 Продублирую главное:",
+    "uk": "Ця ціль у тебе вже позначена 👍 Продублюю головне:",
+    "en": "This goal is already marked for you 👍 Here's the key part again:",
 }
 
 # Пост в служебный #заявки (team-facing, RU).
@@ -285,6 +336,251 @@ ANCHOR_GOALS = (
     "👀 — осмотреться\n\n"
     "Жми реакцию под этим сообщением — я открою тебе каналы и напишу в личку, "
     "с чего начать."
+)
+
+
+# ══ Письмо-карта + тур (часть 3, тексты утверждены V 22.07 с правками) ════════
+# Правки V: гендер-нейтральность; «бесплатно» — только про уроки;
+# «с чем система уже помогает» вместо обещаний. RU — канон; UK/EN — адаптации.
+
+WELCOME_CARD = {
+    "ru": (
+        "**Добро пожаловать в Quanta 👋**\n"
+        "Ты внутри. Всё, что нужно знать — за 30 секунд:\n\n"
+        "💬 {ch_general} — поболтать · ❓ {ch_questions} — спросить, ответят\n"
+        "🏆 {ch_wins} — работы участников · 🧠 {ch_learn} — бесплатные AI-уроки\n"
+        "📦 {ch_materials} — что такое Quanta: основа для начинающих · "
+        "📣 {ch_ann} — новости\n\n"
+        "🎯 Цели можно поменять или добавить в любой момент — вкладка "
+        "**«Каналы и роли»** в самом верху списка каналов.\n\n"
+        "Сейчас пришлю пару слов под каждую выбранную тобой цель 👇"
+    ),
+    "uk": (
+        "**Ласкаво просимо у Quanta 👋**\n"
+        "Ти всередині. Все, що треба знати — за 30 секунд:\n\n"
+        "💬 {ch_general} — поспілкуватися · ❓ {ch_questions} — запитати, дадуть відповідь\n"
+        "🏆 {ch_wins} — роботи учасників · 🧠 {ch_learn} — безкоштовні AI-уроки\n"
+        "📦 {ch_materials} — що таке Quanta: основа для початківців · "
+        "📣 {ch_ann} — новини\n\n"
+        "🎯 Цілі можна змінити чи додати будь-коли — вкладка "
+        "**«Канали та ролі»** нагорі списку каналів.\n\n"
+        "Зараз надішлю кілька слів під кожну обрану тобою ціль 👇"
+    ),
+    "en": (
+        "**Welcome to Quanta 👋**\n"
+        "You're in. Everything you need to know — in 30 seconds:\n\n"
+        "💬 {ch_general} — chat · ❓ {ch_questions} — ask, people answer\n"
+        "🏆 {ch_wins} — member works · 🧠 {ch_learn} — free AI lessons\n"
+        "📦 {ch_materials} — what Quanta is: the basics · "
+        "📣 {ch_ann} — news\n\n"
+        "🎯 Change or add goals any time — the **\"Channels & Roles\"** tab "
+        "at the top of the channel list.\n\n"
+        "Now I'll send a few words for each goal you picked 👇"
+    ),
+}
+
+TOUR_SKIP = {
+    "ru": ("Ок! Помни: цели — во вкладке «Каналы и роли», вопросы — "
+           "в {ch_questions} 👋"),
+    "uk": ("Ок! Пам'ятай: цілі — у вкладці «Канали та ролі», питання — "
+           "в {ch_questions} 👋"),
+    "en": ("Ok! Remember: goals live in the \"Channels & Roles\" tab, "
+           "questions go to {ch_questions} 👋"),
+}
+
+TOUR_STEP1 = {
+    "ru": (
+        "**Quanta за 20 секунд**\n"
+        "Quanta — одна система вместо десятка сервисов: контент, видео и "
+        "тексты под твой бизнес в одном месте. Бесплатные AI-уроки — "
+        "в {ch_learn}. Что такое Quanta — в {ch_materials}."
+    ),
+    "uk": (
+        "**Quanta за 20 секунд**\n"
+        "Quanta — одна система замість десятка сервісів: контент, відео й "
+        "тексти під твій бізнес в одному місці. Безкоштовні AI-уроки — "
+        "в {ch_learn}. Що таке Quanta — в {ch_materials}."
+    ),
+    "en": (
+        "**Quanta in 20 seconds**\n"
+        "Quanta is one system instead of a dozen services: content, video, "
+        "and copy for your business in one place. Free AI lessons — in "
+        "{ch_learn}. What Quanta is — in {ch_materials}."
+    ),
+}
+
+# Шаг 2 собирается из строк по выбранным целям
+TOUR_STEP2_HEADER = {
+    "ru": "**Твои двери:**",
+    "uk": "**Твої двері:**",
+    "en": "**Your doors:**",
+}
+TOUR_GOAL_LINES = {
+    "ru": {
+        "learn": "🧠 {ch_learn} — уроки и задание недели, начни с первого",
+        "earn": ("💰 личка со мной — пришли свой Quanta ID (логин или почту), "
+                 "проверю партнёрку и открою {ch_earn}"),
+        "company": ("🏢 напиши здесь, что за компания — команда подключит её "
+                    "и даст закрытый канал"),
+        "business": "🚀 {ch_materials} — с чем система уже помогает бизнесу",
+        "watch": "👀 {ch_wins} — посмотри, что делают другие",
+    },
+    "uk": {
+        "learn": "🧠 {ch_learn} — уроки та завдання тижня, почни з першого",
+        "earn": ("💰 особисті зі мною — надішли свій Quanta ID (логін або "
+                 "пошту), перевірю партнерку і відкрию {ch_earn}"),
+        "company": ("🏢 напиши тут, що за компанія — команда підключить її "
+                    "і дасть закритий канал"),
+        "business": "🚀 {ch_materials} — з чим система вже допомагає бізнесу",
+        "watch": "👀 {ch_wins} — подивись, що роблять інші",
+    },
+    "en": {
+        "learn": "🧠 {ch_learn} — lessons and the weekly task, start with the first",
+        "earn": ("💰 DM with me — send your Quanta ID (login or email), "
+                 "I'll check the partner program and open {ch_earn}"),
+        "company": ("🏢 write here what company it is — the team will connect "
+                    "it and give you a private channel"),
+        "business": "🚀 {ch_materials} — what the system already helps businesses with",
+        "watch": "👀 {ch_wins} — see what others make",
+    },
+}
+
+TOUR_STEP3 = {
+    "ru": (
+        "**Три правила дома:**\n"
+        "🎯 Цели меняются во вкладке «Каналы и роли» — в любой момент, "
+        "можно несколько.\n"
+        "🏆 Есть результат в Quanta — покажи в {ch_wins}.\n"
+        "❓ Застрял — спроси в {ch_questions}: отвечаем публично, чтобы "
+        "помогло и следующему.\n\n"
+        "Всё, ты дома 👋"
+    ),
+    "uk": (
+        "**Три правила дому:**\n"
+        "🎯 Цілі змінюються у вкладці «Канали та ролі» — будь-коли, "
+        "можна кілька.\n"
+        "🏆 Є результат у Quanta — покажи в {ch_wins}.\n"
+        "❓ Щось не виходить — запитай у {ch_questions}: відповідаємо "
+        "публічно, щоб допомогло й наступному.\n\n"
+        "Все, ти вдома 👋"
+    ),
+    "en": (
+        "**Three house rules:**\n"
+        "🎯 Goals change in the \"Channels & Roles\" tab — any time, "
+        "several at once.\n"
+        "🏆 Made something in Quanta — show it in {ch_wins}.\n"
+        "❓ Stuck — ask in {ch_questions}: we answer publicly so it helps "
+        "the next person too.\n\n"
+        "That's it, you're home 👋"
+    ),
+}
+
+# ── Публичное приветствие в #общее (гендер-нейтрально, правка V) ─────────────
+ANNOUNCE_WELCOME = "Встречайте {mention} 👋 Цель: {goals}. Добро пожаловать!"
+
+# ── Напоминание 48ч: цель 💰 отмечена, Quanta ID не прислан (правка V) ───────
+REMINDER_48H = {
+    "ru": (
+        "У тебя отмечена цель 💰, но Quanta ID пока нет. Пришли его сюда "
+        "(логин или почту из кабинета) — проверю и открою {ch_earn}. "
+        "Неактуально — просто игнорируй 🙂"
+    ),
+    "uk": (
+        "У тебе позначена ціль 💰, але Quanta ID поки немає. Надішли його "
+        "сюди (логін або пошту з кабінету) — перевірю і відкрию {ch_earn}. "
+        "Неактуально — просто ігноруй 🙂"
+    ),
+    "en": (
+        "You have the 💰 goal marked, but no Quanta ID yet. Send it here "
+        "(login or email from your dashboard) — I'll check and open "
+        "{ch_earn}. Not relevant — just ignore this 🙂"
+    ),
+}
+
+# ── Кнопка-починка в #старт и пинг при закрытой личке ────────────────────────
+FIX_BUTTON_LABEL = "🛠 Не открылись каналы или нет письма?"
+FIX_ALL_OK = {
+    "ru": ("У тебя всё в порядке: каналы открыты, письма я отправлял. "
+           "Не видишь их — проверь личку: Настройки → Конфиденциальность → "
+           "«Личные сообщения от участников сервера», и нажми кнопку ещё раз."),
+    "uk": ("У тебе все гаразд: канали відкриті, листи я надсилав. Не бачиш "
+           "їх — перевір особисті: Налаштування → Конфіденційність → "
+           "«Особисті повідомлення від учасників сервера», і натисни ще раз."),
+    "en": ("Everything's fine: your channels are open and I've sent the "
+           "letters. Can't see them — check your DMs: Settings → Privacy → "
+           "\"Direct messages from server members\", then press again."),
+}
+FIX_REPAIRED = {
+    "ru": "Починил: {what}. Если письма нет — открой личку и нажми ещё раз.",
+    "uk": "Полагодив: {what}. Якщо листа немає — відкрий особисті й натисни ще раз.",
+    "en": "Fixed: {what}. If there's no letter — open your DMs and press again.",
+}
+PING_CLOSED_DM = (
+    "{mention}, не могу написать тебе в личку 📪 Открой: Настройки → "
+    "Конфиденциальность → «Личные сообщения от участников сервера» — "
+    "и нажми кнопку «{btn}» ниже."
+)
+
+# ── Фолбэк в личке: бот не молчит на незнакомые сообщения ────────────────────
+DM_FALLBACK = {
+    "ru": (
+        "Я пока отвечаю только на конкретные вещи:\n"
+        "📖 `!faq` — частые вопросы (оплата, вывод, лицензия…)\n"
+        "💰 если у тебя отмечена цель «заработать» — пришли сюда свой Quanta ID\n"
+        "❓ живой вопрос — задай в {ch_questions}, там ответят\n"
+        "🎯 поменять цели — вкладка «Каналы и роли» на сервере"
+    ),
+    "uk": (
+        "Я поки відповідаю лише на конкретні речі:\n"
+        "📖 `!faq` — часті питання (оплата, вивід, ліцензія…)\n"
+        "💰 якщо в тебе позначена ціль «заробити» — надішли сюди свій Quanta ID\n"
+        "❓ живе питання — постав у {ch_questions}, там дадуть відповідь\n"
+        "🎯 змінити цілі — вкладка «Канали та ролі» на сервері"
+    ),
+    "en": (
+        "For now I answer specific things only:\n"
+        "📖 `!faq` — frequent questions (payment, withdrawal, license…)\n"
+        "💰 if the \"earn\" goal is marked for you — send your Quanta ID here\n"
+        "❓ a live question — ask in {ch_questions}, people answer there\n"
+        "🎯 change goals — the \"Channels & Roles\" tab on the server"
+    ),
+}
+
+# ── 🏢: ответ «что за компания» → заявка в #заявки ───────────────────────────
+COMPANY_RECEIVED_DM = {
+    "ru": ("Принял, передаю команде 👍 Она свяжется с тобой по подключению "
+           "компании."),
+    "uk": ("Прийняв, передаю команді 👍 Вона зв'яжеться з тобою щодо "
+           "підключення компанії."),
+    "en": ("Got it, passing to the team 👍 They'll get back to you about "
+           "connecting the company."),
+}
+COMPANY_POST = "🏢 Заявка компании: {mention} (`{name}`, id {user_id}) · «{text}»"
+
+# ── Пинг AC: заявка ждёт дольше суток (SLA части 2) ──────────────────────────
+SLA_PING = "⏰ {admins} заявка от {mention} ждёт дольше суток (Quanta ID: `{qid}`)"
+
+# ── Пост-указатель в #старт (после cutover; канон части 3 + правки V) ────────
+START_POINTER = (
+    "**Карта сервера:**\n"
+    "{ch_materials} — что такое Quanta: основа для начинающих · "
+    "{ch_general} — общий чат · {ch_questions} — спроси, ответят · "
+    "{ch_wins} — работы участников · {ch_learn} — уроки AI (Q-Lab) · "
+    "{ch_support} — как сообщить о баге · {ch_ann} — новости\n\n"
+    "🎯 Выбрать или поменять цели — вкладка **«Каналы и роли»** над списком "
+    "каналов. Можно несколько, можно в любой момент. Отмечена цель 💰 — "
+    "напишу тебе в личку, что дальше.\n"
+    "⚠️ Закрыта личка — я не достучусь: Настройки → Конфиденциальность → "
+    "«Личные сообщения от участников сервера»."
+)
+
+# ── Закреп-маршрутизатор в #поддержка (кнопки: тикет + FAQ) ──────────────────
+SUPPORT_PIN = (
+    "**Куда с чем идти:**\n"
+    "Вопрос по продукту или оплате — жми «🎫 Открыть тикет», разберём "
+    "приватно.\n"
+    "Простой вопрос — в {ch_questions}, отвечаем публично.\n"
+    "Личное по аккаунту или платежу — только в тикет, не в общий чат."
 )
 
 

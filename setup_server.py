@@ -131,17 +131,11 @@ def _overwrites(tier: str, guild: discord.Guild, roles: dict,
         for t in team_roles:
             ow[t] = _team_overwrite()
     elif tier == "earn":
-        # читают участники, пишут @affiliate (+команда — лидерборд и т.п.).
-        # @member: явно закрываем и ветки — иначе «писать нельзя» обходится
-        # созданием треда (create_public_threads/send_messages_in_threads —
-        # отдельные права в Discord; ловушка «боковой двери»)
+        # ПОЛНОСТЬЮ СКРЫТЫЙ клуб (решение V 21.07, спека §4): @everyone и
+        # @member канал НЕ видят — он появляется в списке только с @affiliate.
         ow = {
             everyone: deny_view,
-            member: discord.PermissionOverwrite(
-                view_channel=True, send_messages=False,
-                send_messages_in_threads=False, create_public_threads=False,
-                create_private_threads=False, add_reactions=True,
-                read_message_history=True),
+            member: deny_view,
             affiliate: discord.PermissionOverwrite(
                 view_channel=True, send_messages=True,
                 read_message_history=True),

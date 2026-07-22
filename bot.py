@@ -99,6 +99,10 @@ def user_record(user_id: int) -> dict:
     rec = state[key]
     rec.setdefault("goals", [])
     rec.setdefault("pending_qid", False)
+    rec.setdefault("pending_company", False)
+    rec.setdefault("card_sent", False)
+    rec.setdefault("announced", False)
+    rec.setdefault("reminded48", False)
     return rec
 
 
@@ -183,6 +187,9 @@ def channel_mentions(guild: discord.Guild) -> dict:
         "ch_learn": config.LEARN_CHANNEL,
         "ch_wins": config.WINS_CHANNEL,
         "ch_questions": config.QUESTIONS_CHANNEL,
+        "ch_materials": config.MATERIALS_CHANNEL,
+        "ch_ann": config.ANNOUNCEMENTS_CHANNEL,
+        "ch_support": config.SUPPORT_CHANNEL,
     }
     out = {}
     for key, name in mapping.items():
@@ -191,12 +198,254 @@ def channel_mentions(guild: discord.Guild) -> dict:
     return out
 
 
+# Эмодзи цели по ключу (для поста «Встречайте» и шага 2 тура)
+EMOJI_BY_GOAL = {goal: emoji for emoji, goal in config.GOAL_EMOJI.items()}
+
+
+def lang_of(member) -> str:
+    """Язык участника: роль языка (нативный опрос) → state → дефолт."""
+    for role in getattr(member, "roles", []):
+        code = config.LANG_ROLES.get(role.name)
+        if code:
+            return code
+    rec = state.get(str(getattr(member, "id", 0)))
+    return (rec or {}).get("lang") or content.DEFAULT_LANG
+
+
+def fmt(text_or_dict, lang: str, guild=None, **extra) -> str:
+    """Подставить упоминания каналов и доп-поля в текст (или словарь языков)."""
+    if isinstance(text_or_dict, dict):
+        text = text_or_dict.get(lang) or text_or_dict[content.DEFAULT_LANG]
+    else:
+        text = text_or_dict
+    fields = dict(content._CH_DEFAULTS)
+    if guild is not None:
+        fields.update(channel_mentions(guild))
+    fields.update(extra)
+    return text.format(**fields)
+
+
+def goals_of(member) -> list:
+    """Цели участника: из state + из ролей (роль — источник правды опроса)."""
+    rec = state.get(str(member.id)) or {}
+    goals = list(rec.get("goals") or [])
+    for role in getattr(member, "roles", []):
+        g = config.GOAL_BY_ROLE.get(role.name)
+        if g and g not in goals:
+            goals.append(g)
+    return goals
+
+
+# ── Кнопки: тур в личке, починка в #старт, поддержка ─────────────────────────
+# Все view — persistent (timeout=None, фиксированные custom_id): переживают
+# рестарт бота, состояние шага не хранится — каждый шаг вычисляется на клике.
+
+def _member_of(user):
+    g = main_guild()
+    return g.get_member(user.id) if g else None
+
+
+def _tour_step2_text(member, lang: str) -> str:
+    goals = goals_of(member) or ["learn", "watch"]
+    lines = [content.TOUR_STEP2_HEADER[lang]]
+    for g in ("learn", "earn", "company", "business", "watch"):
+        if g in goals:
+            lines.append(content.TOUR_GOAL_LINES[lang][g])
+    return "\n".join(lines)
+
+
+class TourEntryView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="🚀 Начать знакомство",
+                       style=discord.ButtonStyle.primary, custom_id="q_tour_start")
+    async def start(self, interaction: discord.Interaction, _):
+        m = _member_of(interaction.user)
+        lang = lang_of(m) if m else content.DEFAULT_LANG
+        await interaction.response.send_message(
+            fmt(content.TOUR_STEP1, lang, main_guild()), view=TourStep1View())
+
+    @discord.ui.button(label="Пропустить",
+                       style=discord.ButtonStyle.secondary, custom_id="q_tour_skip")
+    async def skip(self, interaction: discord.Interaction, _):
+        m = _member_of(interaction.user)
+        lang = lang_of(m) if m else content.DEFAULT_LANG
+        await interaction.response.send_message(
+            fmt(content.TOUR_SKIP, lang, main_guild()))
+
+
+class TourStep1View(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="Дальше →",
+                       style=discord.ButtonStyle.primary, custom_id="q_tour_s2")
+    async def next(self, interaction: discord.Interaction, _):
+        m = _member_of(interaction.user)
+        lang = lang_of(m) if m else content.DEFAULT_LANG
+        text = fmt(_tour_step2_text(m, lang) if m else
+                   content.TOUR_STEP2_HEADER[lang], lang, main_guild())
+        await interaction.response.send_message(text, view=TourStep2View())
+
+
+class TourStep2View(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="Дальше →",
+                       style=discord.ButtonStyle.primary, custom_id="q_tour_s3")
+    async def next(self, interaction: discord.Interaction, _):
+        m = _member_of(interaction.user)
+        lang = lang_of(m) if m else content.DEFAULT_LANG
+        await interaction.response.send_message(
+            fmt(content.TOUR_STEP3, lang, main_guild()))
+
+
+class FixView(discord.ui.View):
+    """Кнопка-починка в #старт: одна кнопка чинит роли/письма (решение §4)."""
+
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label=content.FIX_BUTTON_LABEL,
+                       style=discord.ButtonStyle.primary, custom_id="q_fix")
+    async def fix(self, interaction: discord.Interaction, _):
+        # починка шлёт несколько ЛС — дольше 3с лимита Discord на ответ,
+        # поэтому сначала defer, финальный текст уходит followup'ом
+        await interaction.response.defer(ephemeral=True)
+        m = _member_of(interaction.user)
+        if m is None:
+            await interaction.followup.send("🤷", ephemeral=True)
+            return
+        lang = lang_of(m)
+        repaired = []
+        rec = user_record(m.id)
+        # 1) роли: цель есть, @member нет → догнать (каналы откроются)
+        if goals_of(m) and not rec.get("member_granted"):
+            for g in goals_of(m):
+                if g not in rec["goals"]:
+                    rec["goals"].append(g)
+            if config.NATIVE_ONBOARDING:
+                rec["rules_ack"] = True
+            await save_state()
+            await maybe_grant_member(m)
+            if rec.get("member_granted"):
+                repaired.append("доступ к каналам")
+        # 2) письма: карта + value-DM по целям заново
+        delivered = await dm(m, fmt(content.WELCOME_CARD, lang, m.guild))
+        if delivered:
+            rec["card_sent"] = True
+            mentions = channel_mentions(m.guild)
+            for g in goals_of(m):
+                await dm(m, content.value_dm(g, lang, config.PRODUCT_URL, mentions))
+                if g == "earn" and not rec.get("qid"):
+                    rec["pending_qid"] = True
+            await save_state()
+            repaired.append("письма отправлены")
+        text = (fmt(content.FIX_REPAIRED, lang, what=", ".join(repaired))
+                if repaired else fmt(content.FIX_ALL_OK, lang))
+        await interaction.followup.send(text, ephemeral=True)
+
+
+class SupportView(discord.ui.View):
+    """#поддержка: [🎫 Открыть тикет](ссылка) + [📖 Частые вопросы] (эфемерно)."""
+
+    def __init__(self, invite_url: str):
+        super().__init__(timeout=None)
+        self.add_item(discord.ui.Button(label="🎫 Открыть тикет",
+                                        style=discord.ButtonStyle.link,
+                                        url=invite_url))
+
+    @discord.ui.button(label="📖 Частые вопросы",
+                       style=discord.ButtonStyle.secondary, custom_id="q_support_faq")
+    async def faq(self, interaction: discord.Interaction, _):
+        m = _member_of(interaction.user)
+        lang = lang_of(m) if m else content.DEFAULT_LANG
+        topics = ", ".join(t["title"] for t in content.FAQ_TOPICS[lang].values())
+        await interaction.response.send_message(
+            content.FAQ_LIST_PROMPT[lang].format(topics=topics), ephemeral=True)
+
+
+async def dm_view(member, text: str, view) -> bool:
+    """ЛС с кнопками; закрытая личка — не ошибка, просто False."""
+    try:
+        await member.send(text, view=view)
+        return True
+    except discord.Forbidden:
+        log.info("ЛС закрыты у %s — пропускаю (view)", member)
+    except discord.HTTPException as e:
+        log.warning("Не удалось отправить ЛС (view) %s: %s", member, e)
+    return False
+
+
+# ── Центральная обработка выбора цели (реакция / роль из опроса / вкладка) ────
+async def process_goal_pick(member: discord.Member, goal: str,
+                            notify: bool = True) -> None:
+    """Единый вход для всех источников цели (условие V №2: источник не важен)."""
+    rec = user_record(member.id)
+    if config.NATIVE_ONBOARDING:
+        rec["rules_ack"] = True  # экран правил пройден на входе (Discord)
+    lang = lang_of(member)
+    mentions = channel_mentions(member.guild)
+    if goal in rec["goals"]:
+        if notify:
+            # «уже выбрано»: без дублей заявок, повтор главного (канон части 2)
+            await dm(member, content.ALREADY_PICKED_DM.get(lang) or
+                     content.ALREADY_PICKED_DM[content.DEFAULT_LANG])
+            delivered = await dm(member, content.value_dm(
+                goal, lang, config.PRODUCT_URL, mentions))
+            if goal == "earn" and delivered and not rec.get("qid"):
+                rec["pending_qid"] = True
+                await save_state()
+        await maybe_grant_member(member)
+        return
+    rec["goals"].append(goal)
+    await save_state()
+    if notify:
+        if not rec.get("card_sent"):
+            if await dm_view(member, fmt(content.WELCOME_CARD, lang, member.guild),
+                             TourEntryView()):
+                rec["card_sent"] = True
+                await save_state()
+        delivered = await dm(member, content.value_dm(
+            goal, lang, config.PRODUCT_URL, mentions))
+        if goal == "earn":
+            if delivered:
+                rec["pending_qid"] = True
+                await save_state()
+                schedule_qid_reminder(member)
+            else:
+                log.warning("💰: ЛС закрыты у %s — письмо не ушло", member)
+                await ping_closed_dm(member)
+        elif goal == "company" and delivered:
+            rec["pending_company"] = True
+            await save_state()
+        log.info("Цель=%s (lang=%s, notify) → %s", goal, lang, member)
+    await maybe_grant_member(member)
+
+
+async def ping_closed_dm(member) -> None:
+    """Страховка §4: письмо не ушло → пинг в #старт, самоудаление через час."""
+    ch = discord.utils.get(member.guild.text_channels, name=config.START_CHANNEL)
+    if ch is None:
+        return
+    try:
+        await ch.send(content.PING_CLOSED_DM.format(
+            mention=member.mention, btn=content.FIX_BUTTON_LABEL),
+            delete_after=3600)
+    except discord.HTTPException as e:
+        log.warning("Пинг в #%s не ушёл: %s", config.START_CHANNEL, e)
+
+
 # ── Выдача @member, когда оба шага пройдены ───────────────────────────────────
 async def maybe_grant_member(member: discord.Member) -> None:
     rec = user_record(member.id)
     if rec.get("member_granted") or member.id in _granting:
         return
-    if not (rec.get("rules_ack") and rec.get("goals")):
+    # в нативном режиме правила приняты на экране входа (Rules Screening)
+    rules_ok = rec.get("rules_ack") or config.NATIVE_ONBOARDING
+    if not (rules_ok and rec.get("goals")):
         return
     _granting.add(member.id)
     try:
@@ -206,8 +455,78 @@ async def maybe_grant_member(member: discord.Member) -> None:
             rec["member_granted"] = True
             await save_state()
             log.info("@member выдан: %s (цели=%s)", member, rec.get("goals"))
+            await announce_welcome(member)
     finally:
         _granting.discard(member.id)
+
+
+async def announce_welcome(member: discord.Member) -> None:
+    """Пост «Встречайте» в #общее (часть 1 шаг 8; текст — правка V, без рода)."""
+    rec = user_record(member.id)
+    if rec.get("announced"):
+        return
+    ch = discord.utils.get(member.guild.text_channels,
+                           name=config.GENERAL_CHANNEL)
+    if ch is None:
+        return
+    goals = " ".join(EMOJI_BY_GOAL[g] for g in rec.get("goals", [])
+                     if g in EMOJI_BY_GOAL) or "👀"
+    try:
+        await ch.send(content.ANNOUNCE_WELCOME.format(
+            mention=member.mention, goals=goals))
+        rec["announced"] = True
+        await save_state()
+    except discord.HTTPException as e:
+        log.warning("Пост «Встречайте» не ушёл: %s", e)
+
+
+# ── 48ч-напоминание: цель 💰 отмечена, Quanta ID не прислан (одно) ────────────
+_qid48_scheduled: set = set()
+
+
+def schedule_qid_reminder(member: discord.Member) -> None:
+    if member.id in _qid48_scheduled:
+        return
+    _qid48_scheduled.add(member.id)
+    client.loop.create_task(_qid48_task(member))
+
+
+async def _qid48_task(member: discord.Member) -> None:
+    try:
+        await asyncio.sleep(48 * 3600)
+        rec = state.get(str(member.id))
+        if (rec and rec.get("pending_qid") and not rec.get("qid")
+                and not rec.get("reminded48")):
+            lang = lang_of(member)
+            await dm(member, fmt(content.REMINDER_48H, lang, member.guild))
+            rec["reminded48"] = True
+            await save_state()
+            log.info("48ч-напоминание 💰 → %s", member)
+    finally:
+        _qid48_scheduled.discard(member.id)
+
+
+# ── SLA-пинг: заявка в #заявки без ответа сутки → пинг админам (часть 2) ─────
+async def _sla_task(user_id: int, qid: str) -> None:
+    await asyncio.sleep(24 * 3600)
+    guild = main_guild()
+    if guild is None:
+        return
+    m = guild.get_member(user_id)
+    if m is None:
+        return
+    aff = find_role(guild, config.AFFILIATE_ROLE)
+    if aff is not None and aff in m.roles:
+        return  # роль выдана — SLA соблюдён
+    ch = discord.utils.get(guild.text_channels, name=config.APPLICATIONS_CHANNEL)
+    if ch is None:
+        return
+    admins = " ".join(f"<@{i}>" for i in config.ADMIN_IDS)
+    try:
+        await ch.send(content.SLA_PING.format(
+            admins=admins, mention=m.mention, qid=qid))
+    except discord.HTTPException as e:
+        log.warning("SLA-пинг не ушёл: %s", e)
 
 
 # ── Напоминание через REMINDER_HOURS ──────────────────────────────────────────
@@ -301,11 +620,90 @@ async def resume_reminders() -> None:
 
 
 # ── События ──────────────────────────────────────────────────────────────────
+async def ensure_aux_roles(guild: discord.Guild) -> None:
+    """Роли под нативный опрос: 5 целей + 3 языка (идемпотентно)."""
+    wanted = list(config.GOAL_ROLES.values()) + list(config.LANG_ROLES)
+    for name in wanted:
+        if discord.utils.get(guild.roles, name=name) is None:
+            try:
+                await guild.create_role(name=name, reason="Quanta: роли опроса")
+                log.info("Роль создана: @%s", name)
+            except discord.HTTPException as e:
+                log.error("Не создать роль @%s: %s", name, e)
+
+
+async def reconcile_roles(guild: discord.Guild) -> None:
+    """Стартовая сверка: роль цели есть, @member нет → догнать (без DM).
+
+    Закрывает окно «опрос выдал роль, пока бот лежал» + чинит state после
+    редеплоя (диск эфемерный). Письма здесь НЕ шлём — не спамить старых."""
+    fixed = 0
+    for m in guild.members:
+        if m.bot:
+            continue
+        role_goals = [config.GOAL_BY_ROLE[r.name] for r in m.roles
+                      if r.name in config.GOAL_BY_ROLE]
+        if not role_goals:
+            continue
+        rec = user_record(m.id)
+        for r in m.roles:
+            code = config.LANG_ROLES.get(r.name)
+            if code:
+                rec["lang"] = code
+        new = [g for g in role_goals if g not in rec["goals"]]
+        if new:
+            rec["goals"].extend(new)
+            rec["announced"] = True  # бэкфилл: без поста «Встречайте»
+            await save_state()
+        if not rec.get("member_granted"):
+            await maybe_grant_member(m)
+            if rec.get("member_granted"):
+                fixed += 1
+    if fixed:
+        log.info("Сверка ролей: доступ догнан у %d участников", fixed)
+
+
+async def ensure_support_pin(guild: discord.Guild) -> None:
+    """Закреп-маршрутизатор в #поддержка с кнопками (когда есть ссылка тикетов)."""
+    if not config.SUPPORT_INVITE_URL:
+        return
+    ch = discord.utils.get(guild.text_channels, name=config.SUPPORT_CHANNEL)
+    if ch is None:
+        return
+    try:
+        pins = await ch.pins()
+        if any(p.author.id == client.user.id and
+               p.content.startswith("**Куда с чем идти") for p in pins):
+            return
+        msg = await ch.send(fmt(content.SUPPORT_PIN, content.DEFAULT_LANG, guild),
+                            view=SupportView(config.SUPPORT_INVITE_URL))
+        await msg.pin(reason="Quanta: маршрутизатор поддержки")
+        log.info("Закреп поддержки с кнопками запощен")
+    except discord.HTTPException as e:
+        log.warning("Закреп поддержки не встал: %s", e)
+
+
+_views_registered = False
+
+
 @client.event
 async def on_ready():
-    global _setup_started
+    global _setup_started, _views_registered
     log.info("Бот запущен: %s", client.user)
     log.info("Гильдии: %s", [(g.name, g.id) for g in client.guilds])
+    if not _views_registered:
+        _views_registered = True
+        client.add_view(TourEntryView())
+        client.add_view(TourStep1View())
+        client.add_view(TourStep2View())
+        client.add_view(FixView())
+        if config.SUPPORT_INVITE_URL:
+            client.add_view(SupportView(config.SUPPORT_INVITE_URL))
+    guild_now = main_guild()
+    if guild_now is not None:
+        await ensure_aux_roles(guild_now)
+        await reconcile_roles(guild_now)
+        await ensure_support_pin(guild_now)
     if config.GUILD_ID and not any(g.id == config.GUILD_ID for g in client.guilds):
         log.warning("GUILD_ID=%s — бот не состоит в этой гильдии!", config.GUILD_ID)
     if not config.RULES_MESSAGE_ID:
@@ -348,6 +746,13 @@ async def on_member_join(member: discord.Member):
     rec["member_granted"] = False
     await save_state()
 
+    if config.NATIVE_ONBOARDING:
+        # часть 3: гейт держит Discord (правила + опрос). Не прошёл опрос —
+        # физически не участник. @newcomer и 24ч-напоминание упразднены;
+        # письма поедут по событиям ролей (on_member_update).
+        log.info("Join (native): %s (id=%s) — жду ролей опроса", member, member.id)
+        return
+
     await add_role_by_name(member, config.NEWCOMER_ROLE)
     # прошёл онбординг раньше (state пережил его выход) — восстановить сразу
     await maybe_grant_member(member)
@@ -357,6 +762,42 @@ async def on_member_join(member: discord.Member):
         await dm(member, content.AUTO_DM)
         schedule_reminder(member, config.REMINDER_HOURS * 3600)
     log.info("Join: %s (id=%s)", member, member.id)
+
+
+@client.event
+async def on_member_update(before: discord.Member, after: discord.Member):
+    """События ролей — главный вход после перехода на нативный опрос.
+
+    Условие V №2: бот реагирует на роль цели из ЛЮБОГО источника одинаково
+    (опрос при входе, вкладка «Каналы и роли», ручная выдача)."""
+    if after.bot:
+        return
+    if config.GUILD_ID and after.guild.id != config.GUILD_ID:
+        return
+    added = [r for r in after.roles if r not in before.roles]
+    if not added:
+        return
+    rec = user_record(after.id)
+    lang_changed = False
+    for role in added:
+        code = config.LANG_ROLES.get(role.name)
+        if code and rec.get("lang") != code:
+            rec["lang"] = code
+            lang_changed = True
+    if lang_changed:
+        await save_state()
+        log.info("Язык (роль)=%s: %s", rec["lang"], after)
+    for role in added:
+        goal = config.GOAL_BY_ROLE.get(role.name)
+        if goal:
+            await process_goal_pick(after, goal, notify=True)
+        elif role.name == config.AFFILIATE_ROLE:
+            # AC выдаёт @affiliate после проверки U-50 → закрываем петлю DM
+            rec["pending_qid"] = False
+            await save_state()
+            lang = lang_of(after)
+            await dm(after, fmt(content.ACCESS_OPENED_DM, lang, after.guild))
+            log.info("@affiliate выдан → доступ-DM %s", after)
 
 
 @client.event
@@ -400,43 +841,13 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
             await maybe_grant_member(member)
         return
 
-    # выбор цели (💰🏢🚀🧠👀) — можно несколько; value-DM по каждой новой
+    # выбор цели (💰🏢🚀🧠👀) — переходный путь через реакции; после включения
+    # нативного опроса якорь удаляется (cutover), а логика едет через роли
     if config.GOALS_MESSAGE_ID and payload.message_id == config.GOALS_MESSAGE_ID:
         goal = config.GOAL_EMOJI.get(emoji)
         if goal is None:
             return
-        rec = user_record(member.id)
-        goals = rec["goals"]
-        if goal not in goals:
-            goals.append(goal)
-            await save_state()
-            lang = rec.get("lang") or content.DEFAULT_LANG
-            mentions = channel_mentions(guild)
-            await dm(member, content.value_dm(goal, lang, config.PRODUCT_URL, mentions))
-            if goal == "earn":
-                # 💰: просим Quanta ID (спека §8). Флаг заявки — только если
-                # вопрос реально доставлен, иначе любое будущее ЛС боту
-                # превратилось бы в «Quanta ID» без контекста.
-                asked = await dm(member, content.QID_REQUEST_DM[lang].format(
-                    ch_earn=mentions["ch_earn"]))
-                if asked:
-                    rec["pending_qid"] = True
-                    await save_state()
-                else:
-                    log.warning("💰: не смог спросить Quanta ID у %s (ЛС закрыты)", member)
-            log.info("Цель=%s (lang=%s), value-DM → %s", goal, lang, member)
-        elif (goal == "earn" and not rec.get("pending_qid") and not rec.get("qid")):
-            # rescue: 💰 уже выбрана, но Quanta ID так и не спросили (ЛС были
-            # закрыты) — повторный клик реакции = повторная попытка спросить
-            lang = rec.get("lang") or content.DEFAULT_LANG
-            mentions = channel_mentions(guild)
-            asked = await dm(member, content.QID_REQUEST_DM[lang].format(
-                ch_earn=mentions["ch_earn"]))
-            if asked:
-                rec["pending_qid"] = True
-                await save_state()
-                log.info("💰 rescue: повторно спросил Quanta ID у %s", member)
-        await maybe_grant_member(member)
+        await process_goal_pick(member, goal, notify=True)
         return
 
 
@@ -445,9 +856,18 @@ async def on_message(message: discord.Message):
     if message.author.bot:
         return
     if not message.content.startswith("!"):
-        # ЛС без команды: возможно, это ответ с Quanta ID на заявку 💰
+        # ЛС без команды: Quanta ID (💰) → компания (🏢) → фолбэк (не молчим)
         if message.guild is None:
-            await maybe_capture_qid(message)
+            rec = state.get(str(message.author.id))
+            if rec and rec.get("pending_qid"):
+                await maybe_capture_qid(message)
+            elif rec and rec.get("pending_company"):
+                await capture_company(message)
+            else:
+                m = _member_of(message.author)
+                lang = lang_of(m) if m else content.DEFAULT_LANG
+                await dm(message.author,
+                         fmt(content.DM_FALLBACK, lang, main_guild()))
         return
     # отсекаем чужие гильдии сразу; ЛС (message.guild is None) оставляем для !faq
     if message.guild is not None and config.GUILD_ID and message.guild.id != config.GUILD_ID:
@@ -515,7 +935,41 @@ async def maybe_capture_qid(message: discord.Message) -> None:
         await save_state()
         return
     await dm(message.author, content.QID_RECEIVED_DM[lang].format(ch_earn=mentions["ch_earn"]))
+    # SLA части 2: ответ на заявку — сутки; просрочка → пинг админам в #заявки
+    client.loop.create_task(_sla_task(message.author.id, qid))
     log.info("Заявка 💰: %s → #%s (qid=%s)", message.author, config.APPLICATIONS_CHANNEL, qid)
+
+
+async def capture_company(message: discord.Message) -> None:
+    """🏢: ответ «что за компания» → заявка в #заявки (тур, шаг 2)."""
+    rec = state.get(str(message.author.id))
+    if not rec or not rec.get("pending_company"):
+        return
+    text = message.content.strip()[:300]
+    if not text:
+        return
+    guild = main_guild()
+    if guild is None:
+        return
+    ch = discord.utils.get(guild.text_channels, name=config.APPLICATIONS_CHANNEL)
+    if ch is None:
+        log.error("#%s не найден — заявка компании от %s потеряна",
+                  config.APPLICATIONS_CHANNEL, message.author)
+        return
+    member = guild.get_member(message.author.id)
+    try:
+        await ch.send(content.COMPANY_POST.format(
+            mention=member.mention if member else str(message.author),
+            name=str(message.author), user_id=message.author.id, text=text))
+    except discord.HTTPException as e:
+        log.error("Заявка компании не запостилась: %s", e)
+        return
+    rec["pending_company"] = False
+    await save_state()
+    lang = lang_of(member) if member else content.DEFAULT_LANG
+    await dm(message.author, content.COMPANY_RECEIVED_DM[lang])
+    log.info("Заявка 🏢: %s → #%s (%s)", message.author,
+             config.APPLICATIONS_CHANNEL, text[:60])
 
 
 # ── Команды ──────────────────────────────────────────────────────────────────
