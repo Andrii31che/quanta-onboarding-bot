@@ -449,20 +449,12 @@ async def maybe_grant_member(member: discord.Member) -> None:
         return
     _granting.add(member.id)
     try:
-        # @member уже был (старый участник добирает цель / state сброшен
-        # редеплоем) → это восстановление, а не вход: без поста «Встречайте»
-        member_role = find_role(member.guild, config.MEMBER_ROLE)
-        had_member = member_role is not None and member_role in member.roles
         granted = await add_role_by_name(member, config.MEMBER_ROLE)
         if granted:
             await remove_role_by_name(member, config.NEWCOMER_ROLE)
             rec["member_granted"] = True
-            if had_member:
-                rec["announced"] = True
-                log.info("@member уже был: %s — «Встречайте» пропущен", member)
-            else:
-                log.info("@member выдан: %s (цели=%s)", member, rec.get("goals"))
             await save_state()
+            log.info("@member выдан: %s (цели=%s)", member, rec.get("goals"))
             await announce_welcome(member)
     finally:
         _granting.discard(member.id)
