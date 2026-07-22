@@ -90,11 +90,142 @@ async def inventory(client, guild: discord.Guild) -> None:
     log.info("=== INVENTORY DONE — сверь списки и подтверди перед apply ===")
 
 
+# ── APPLY-1: обратимые шаги (переименования, права, дубли) ────────────────────
+# Правки AC 22.07: категорию Text Channels НЕ трогаем, каналы НЕ переносим —
+# только rename на месте; materials НЕ удаляется → это материалы-quanta.
+RENAMES = [
+    # (старое имя, новое имя, тир из setup_server, пустой-двойник на снос)
+    ("general-chat", "общее", "write", "общее"),
+    ("updates", "анонсы", "broadcast", "анонсы"),
+    ("questions-feedback", "вопросы", "write", "вопросы"),
+    ("materials", "материалы-quanta", "broadcast", None),
+]
+
+QUESTIONS_PIN = (
+    "**Куда с чем идти:**\n"
+    "Вопросы по продукту и серверу — сюда, отвечаем публично, ответ видят все.\n"
+    "Нашёл баг — смотри инструкцию в #поддержка.\n"
+    "Личное по аккаунту/платежу — тоже через #поддержка, не в общий чат."
+)
+
+
+async def _find_empty_double(guild, name: str):
+    """Пустой двойник: канал с этим именем БЕЗ категории (создан setup 14.07)."""
+    for ch in guild.text_channels:
+        if ch.name == name and ch.category is None:
+            async for _ in ch.history(limit=1):
+                return None  # не пустой — не трогаем
+            return ch
+    return None
+
+
+async def apply_renames(client, guild: discord.Guild) -> None:
+    """Прогон 1 — обратимое. Fail-fast: первая ошибка останавливает всё."""
+    import setup_server
+    log.info("=== CLEANUP APPLY-1: переименования/права/дубли (fail-fast) ===")
+    roles = {name: discord.utils.get(guild.roles, name=name)
+             for name in (config.MEMBER_ROLE, config.AFFILIATE_ROLE)}
+    team_roles = setup_server.resolve_team_roles(guild)
+
+    for old, new, tier, double_name in RENAMES:
+        ch = discord.utils.get(guild.text_channels, name=old)
+        if ch is None:
+            already = discord.utils.get(guild.text_channels, name=new)
+            if already is not None and already.category is not None:
+                log.info("Шаг %r→%r: уже сделан, пропускаю", old, new)
+                continue
+            log.error("СТОП: канал %r не найден (и %r в категории нет)", old, new)
+            return
+        # 1) двойник удаляем ДО переименования (чтобы не жить с дублем имени)
+        if double_name:
+            double = await _find_empty_double(guild, double_name)
+            if double is not None:
+                await double.delete(reason="Quanta cleanup: пустой двойник (часть 1)")
+                log.info("Удалён пустой двойник #%s (id=%s)", double_name, double.id)
+        # 2) права по тиру (merge — чужие overwrites не трогаем)
+        plan = setup_server._overwrites(tier, guild, roles, team_roles)
+        merged = dict(ch.overwrites)
+        merged.update(plan)
+        await ch.edit(name=new, overwrites=merged,
+                      reason="Quanta cleanup: переименование с историей (часть 1)")
+        log.info("Переименован #%s → #%s (тир %s), история цела", old, new, tier)
+
+    # #анонсы → announcement-тип
+    ann = discord.utils.get(guild.text_channels, name="анонсы")
+    if ann is not None and "COMMUNITY" in guild.features:
+        try:
+            if ann.type is not discord.ChannelType.news:
+                await ann.edit(type=discord.ChannelType.news)
+                log.info("#анонсы переключён в announcement-тип")
+        except (discord.HTTPException, TypeError) as e:
+            log.warning("Не смог сделать #анонсы announcement: %s", e)
+
+    # закреп-маршрутизатор в #вопросы (идемпотентно — ищем свой закреп)
+    q = discord.utils.get(guild.text_channels, name="вопросы")
+    if q is not None:
+        try:
+            pins = await q.pins()
+            if not any(p.author.id == client.user.id and
+                       p.content.startswith("**Куда с чем идти:**") for p in pins):
+                msg = await q.send(QUESTIONS_PIN)
+                await msg.pin(reason="Quanta cleanup: маршрутизатор (§4)")
+                log.info("Закреп-маршрутизатор запощен в #вопросы")
+            else:
+                log.info("Закреп в #вопросы уже есть — пропускаю")
+        except discord.HTTPException as e:
+            log.error("Закреп в #вопросы не получился: %s", e)
+
+    # random — скрыть на месте (не переносим: категорию не трогаем)
+    rnd = discord.utils.get(guild.text_channels, name="random")
+    if rnd is not None:
+        merged = dict(rnd.overwrites)
+        merged[guild.default_role] = discord.PermissionOverwrite(view_channel=False)
+        member = roles.get(config.MEMBER_ROLE)
+        if member is not None:
+            merged[member] = discord.PermissionOverwrite(view_channel=False)
+        await rnd.edit(overwrites=merged,
+                       reason="Quanta cleanup: random в архив (скрыт на месте)")
+        log.info("#random скрыт на месте (история цела; вернуть = открыть права)")
+    log.info("=== APPLY-1 DONE — сверь сервер; удаления (intensive/welcome) "
+             "идут отдельным прогоном apply2 после подтверждения AC ===")
+
+
+# ── APPLY-2: необратимое (бэкап + удаления) — только после «ок» AC ────────────
+DELETE_AFTER_BACKUP = ["intensive", "welcome"]
+
+
+async def apply_deletions(client, guild: discord.Guild) -> None:
+    log.info("=== CLEANUP APPLY-2: бэкап + удаления %s ===", DELETE_AFTER_BACKUP)
+    for name in DELETE_AFTER_BACKUP:
+        ch = discord.utils.get(guild.text_channels, name=name)
+        if ch is None:
+            log.info("#%s уже нет — пропускаю", name)
+            continue
+        try:
+            count = 0
+            async for msg in ch.history(limit=None, oldest_first=True):
+                if msg.content or msg.attachments:
+                    att = " ".join(a.url for a in msg.attachments)
+                    log.info("BACKUP #%s | %s | %s | %s %s", name,
+                             msg.created_at.isoformat()[:16], msg.author,
+                             msg.content[:300], att)
+                    count += 1
+            log.info("Бэкап #%s: %d сообщений выгружено в лог", name, count)
+            await ch.delete(reason="Quanta cleanup: удаление по плану части 1 (V)")
+            log.info("Удалён #%s", name)
+        except discord.HTTPException as e:
+            log.error("СТОП на #%s: %s", name, e)
+            return
+    log.info("=== APPLY-2 DONE ===")
+
+
 async def run(client, guild: discord.Guild) -> None:
     mode = config.CLEANUP_MODE
     if mode == "inventory":
         await inventory(client, guild)
-    elif mode == "apply":
-        log.error("CLEANUP apply ещё не включён — сначала подтверждение списков AC")
+    elif mode == "apply1":
+        await apply_renames(client, guild)
+    elif mode == "apply2":
+        await apply_deletions(client, guild)
     else:
         log.error("Неизвестный CLEANUP_MODE=%r", mode)
