@@ -469,11 +469,13 @@ async def announce_welcome(member: discord.Member) -> None:
                            name=config.GENERAL_CHANNEL)
     if ch is None:
         return
-    goals = " ".join(EMOJI_BY_GOAL[g] for g in rec.get("goals", [])
-                     if g in EMOJI_BY_GOAL) or "👀"
+    labels = [content.GOAL_ANNOUNCE[g] for g in rec.get("goals", [])
+              if g in content.GOAL_ANNOUNCE] or [content.GOAL_ANNOUNCE["watch"]]
+    goal_word = "Цели" if len(labels) > 1 else "Цель"
     try:
         await ch.send(content.ANNOUNCE_WELCOME.format(
-            mention=member.mention, goals=goals))
+            mention=member.mention, goal_word=goal_word,
+            goals=" · ".join(labels)))
         rec["announced"] = True
         await save_state()
     except discord.HTTPException as e:
