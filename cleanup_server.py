@@ -290,5 +290,7 @@ async def run(client, guild: discord.Guild) -> None:
         await apply_hide_earn(client, guild)
     elif mode == "cutover":
         await apply_cutover(client, guild)
+    elif mode in ("", "0", "off"):
+        pass  # выключено явно — не ошибка
     else:
         log.error("Неизвестный CLEANUP_MODE=%r", mode)
