@@ -74,16 +74,16 @@ AMBASSADOR_ROLE = os.environ.get("AMBASSADOR_ROLE", "ambassador")
 TEAM_ROLES = [s.strip() for s in os.environ.get("TEAM_ROLES", "").split(",") if s.strip()]
 
 # ── Каналы (по имени; без префикса #; спека §4 — имена на русском) ────────────
-START_CHANNEL = os.environ.get("START_CHANNEL", "старт")
-APPLICATIONS_CHANNEL = os.environ.get("APPLICATIONS_CHANNEL", "заявки")
-EARN_CHANNEL = os.environ.get("EARN_CHANNEL", "заработок")
-GENERAL_CHANNEL = os.environ.get("GENERAL_CHANNEL", "общее")
-LEARN_CHANNEL = os.environ.get("LEARN_CHANNEL", "обучение")
-WINS_CHANNEL = os.environ.get("WINS_CHANNEL", "результаты")
-QUESTIONS_CHANNEL = os.environ.get("QUESTIONS_CHANNEL", "вопросы")
-MATERIALS_CHANNEL = os.environ.get("MATERIALS_CHANNEL", "материалы-quanta")
-ANNOUNCEMENTS_CHANNEL = os.environ.get("ANNOUNCEMENTS_CHANNEL", "анонсы")
-SUPPORT_CHANNEL = os.environ.get("SUPPORT_CHANNEL", "поддержка")
+START_CHANNEL = os.environ.get("START_CHANNEL", "🚀・старт")
+APPLICATIONS_CHANNEL = os.environ.get("APPLICATIONS_CHANNEL", "📥・заявки")
+EARN_CHANNEL = os.environ.get("EARN_CHANNEL", "💰・заработок")
+GENERAL_CHANNEL = os.environ.get("GENERAL_CHANNEL", "💬・общее")
+LEARN_CHANNEL = os.environ.get("LEARN_CHANNEL", "🧠・обучение")
+WINS_CHANNEL = os.environ.get("WINS_CHANNEL", "🏆・результаты")
+QUESTIONS_CHANNEL = os.environ.get("QUESTIONS_CHANNEL", "❓・вопросы")
+MATERIALS_CHANNEL = os.environ.get("MATERIALS_CHANNEL", "📦・материалы-quanta")
+ANNOUNCEMENTS_CHANNEL = os.environ.get("ANNOUNCEMENTS_CHANNEL", "📣・анонсы")
+SUPPORT_CHANNEL = os.environ.get("SUPPORT_CHANNEL", "🛟・поддержка")
 
 # ── Сообщения-якоря в #старт ─────────────────────────────────────────────────
 # ID сообщения с правилами (реакция ✅ = rules-ack), выбора языка (флаги) и
