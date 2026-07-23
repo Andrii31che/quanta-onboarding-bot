@@ -79,7 +79,8 @@ _VALUE_DM = {
             "{ch_earn} открыт тем, у кого активна партнёрка. Пришли мне сюда "
             "свой Quanta ID (логин или почту) — проверю и открою. Нет "
             "Quanta ID? Зарегистрируйся по ссылке того, кто тебя пригласил, "
-            "и возвращайся."
+            "и возвращайся. Не знаешь, у кого взять ссылку? Напиши в "
+            "{ch_questions} — подскажем."
         ),
         "company": (
             "Привет! Если у тебя своя команда или сеть — Quanta заводится под "
@@ -112,7 +113,8 @@ _VALUE_DM = {
             "Канал {ch_earn} відкритий тим, у кого активна партнерка. Надішли "
             "мені сюди свій Quanta ID (логін або пошту) — перевірю і відкрию. "
             "Немає Quanta ID? Зареєструйся за посиланням того, хто тебе "
-            "запросив, і повертайся."
+            "запросив, і повертайся. Не знаєш, у кого взяти посилання? "
+            "Напиши в {ch_questions} — підкажемо."
         ),
         "company": (
             "Привіт! Якщо в тебе своя команда чи мережа — Quanta налаштовується "
@@ -145,7 +147,8 @@ _VALUE_DM = {
             "The {ch_earn} channel is open to those with an active partner "
             "program. Send me your Quanta ID here (login or email) — I'll "
             "check and open it. No Quanta ID? Register via the link of the "
-            "person who invited you, and come back."
+            "person who invited you, and come back. Not sure whose link to "
+            "use? Ask in {ch_questions} — we'll help."
         ),
         "company": (
             "Hey! If you have your own team or network — Quanta sets up under "
