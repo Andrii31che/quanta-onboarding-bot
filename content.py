@@ -735,7 +735,7 @@ FAQ_TOPICS = {
         },
         "vioxen_issues": {
             "aliases": ["vioxen", "виоксен", "долго генер", "зависа", "генерац"],
-            "title": "Vioxen долго генерит / ошибки",
+            "title": "Quanta долго генерит видео / ошибки",
             "answer": (
                 "Знаю, по видео бывали сбои и долгая генерация — команда чинит. Если "
                 "у тебя ошибка — пришли скрин в канал поддержки, разберём конкретно, "
@@ -864,7 +864,7 @@ FAQ_TOPICS = {
         },
         "vioxen_issues": {
             "aliases": ["vioxen", "віоксен", "довго генер", "зависа", "генерац"],
-            "title": "Vioxen довго генерує / помилки",
+            "title": "Quanta довго генерує відео / помилки",
             "answer": (
                 "Знаю, по відео бували збої та довга генерація — команда лагодить. Якщо "
                 "в тебе помилка — надішли скрін у канал підтримки, розберемо конкретно, "
@@ -993,7 +993,7 @@ FAQ_TOPICS = {
         },
         "vioxen_issues": {
             "aliases": ["vioxen", "slow generation", "freezes", "generation"],
-            "title": "Vioxen is slow / errors",
+            "title": "Quanta video is slow / errors",
             "answer": (
                 "I know, video had outages and slow generation — the team is fixing it. "
                 "If you hit an error — send a screenshot to the support channel, we'll "
@@ -1107,3 +1107,6 @@ SCHOOL_QID_DM = {
 # Пост в служебный #заявки (сводка для спикера — цели потока)
 SCHOOL_POST = "🎓 Школа: {mention} (`{name}`, id {user_id}) записан · цели: {goals}"
 SCHOOL_WAITLIST_POST = "🎓 Школа: {mention} (`{name}`, id {user_id}) в листе ожидания · цели: {goals}"
+
+# Вопрос из ЛС, на который бот не ответил (LLM выключен/не уверен) — команде
+LLM_ESCALATION_POST = "❓ Вопрос из ЛС без ответа: {mention} (`{name}`) · «{text}»"

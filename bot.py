@@ -30,6 +30,7 @@ import discord
 
 import config
 import content
+import llm
 
 logging.basicConfig(
     level=logging.INFO,
@@ -885,10 +886,7 @@ async def on_message(message: discord.Message):
             elif rec and rec.get("pending_company"):
                 await capture_company(message)
             else:
-                m = _member_of(message.author)
-                lang = lang_of(m) if m else content.DEFAULT_LANG
-                await dm(message.author,
-                         fmt(content.DM_FALLBACK, lang, main_guild()))
+                await answer_free_dm(message)
         return
     # отсекаем чужие гильдии сразу; ЛС (message.guild is None) оставляем для !faq
     if message.guild is not None and config.GUILD_ID and message.guild.id != config.GUILD_ID:
@@ -914,6 +912,48 @@ async def on_message(message: discord.Message):
 
 
 # ── 💰-заявка: Quanta ID из ЛС → пост в #заявки (спека §8, Phase 1) ───────────
+# ── Умные ответы в ЛС (спека N10): свободный вопрос → LLM по базе знаний ─────
+async def answer_free_dm(message: discord.Message) -> None:
+    """ЛС без команды и без pending-флагов: LLM-ответ; не вышло → фолбэк
+    + карточка вопроса в #заявки, чтобы команда видела, о чём спрашивают."""
+    m = _member_of(message.author)
+    lang = lang_of(m) if m else content.DEFAULT_LANG
+    reply = None
+    if llm.enabled():
+        history = []
+        try:
+            async for old in message.channel.history(limit=8, oldest_first=False):
+                if old.id == message.id or not old.content:
+                    continue
+                role = "assistant" if old.author.bot else "user"
+                history.append((role, old.content))
+            history.reverse()
+        except discord.HTTPException:
+            pass  # без истории тоже ок — ответим на один вопрос
+        try:
+            async with message.channel.typing():
+                reply = await llm.dm_answer(
+                    message.author.id, message.content, lang, history)
+        except Exception as e:
+            log.error("LLM-ветка упала: %s", e)
+    if reply:
+        await dm(message.author, reply)
+        return
+    await dm(message.author, fmt(content.DM_FALLBACK, lang, main_guild()))
+    # вопрос без ответа — карточка команде (только для содержательного текста)
+    guild = main_guild()
+    if guild is not None and len(message.content.strip()) >= 10:
+        ch = discord.utils.get(guild.text_channels, name=config.APPLICATIONS_CHANNEL)
+        if ch is not None:
+            try:
+                await ch.send(content.LLM_ESCALATION_POST.format(
+                    mention=(m.mention if m else str(message.author)),
+                    name=str(message.author),
+                    text=message.content.strip()[:300]))
+            except discord.HTTPException as e:
+                log.error("Эскалация вопроса не запостилась: %s", e)
+
+
 # ── Школа «Разгон»: /school-signup (спека U3/N4; анкета v2 — V 31.07) ────────
 # Анкета = 2 поля, ник известен из аккаунта — остаётся мультивыбор целей.
 # После отправки: @student + подтверждение (Д1, канал набора); набор закрыт →
