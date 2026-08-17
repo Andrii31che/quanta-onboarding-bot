@@ -709,12 +709,13 @@ async def on_ready():
         _tree_synced = True  # on_ready бывает и при reconnect — sync один раз
         try:
             if config.GUILD_ID:
+                # команды глобальные (работают и в ЛС бота); guild-копии
+                # чистим, чтобы в пикере сервера не было дублей
                 gobj = discord.Object(id=config.GUILD_ID)
-                tree.copy_global_to(guild=gobj)
-                await tree.sync(guild=gobj)  # guild-scoped: в пикере сразу
-            else:
-                await tree.sync()
-            log.info("Слэш-команды синхронизированы: %s",
+                tree.clear_commands(guild=gobj)
+                await tree.sync(guild=gobj)
+            await tree.sync()
+            log.info("Слэш-команды синхронизированы (global): %s",
                      [c.name for c in tree.get_commands()])
         except discord.HTTPException as e:
             _tree_synced = False
