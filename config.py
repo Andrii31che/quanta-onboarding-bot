@@ -157,5 +157,16 @@ CLEANUP_MODE = os.environ.get("CLEANUP_MODE", "").strip().lower()
 # переменную вернуть в "0"/убрать.
 SETUP_MODE = os.environ.get("SETUP_MODE", "").strip() == "1"
 
+# ── Школа «Разгон» (/school-signup, спека U3/N4 + анкета v2 от 31.07) ────────
+# Роль записавшегося (автовход по решению V 12.07).
+STUDENT_ROLE = os.environ.get("STUDENT_ROLE", "student")
+# Канал набора (по имени, как каналы выше). Пусто → бот ищет по подстроке
+# "школа-разгон" и берёт канал с наибольшим номером.
+SCHOOL_COHORT_CHANNEL = os.environ.get("SCHOOL_COHORT_CHANNEL", "").strip()
+# Дата Д1 ближайшего набора, человекочитаемая строка («25.08», «1 сентября»).
+# ПУСТО = набор закрыт: бот отвечает «вход по ходу потока закрыт» и ставит
+# человека в лист ожидания (плейбук 6.4).
+SCHOOL_D1_DATE = os.environ.get("SCHOOL_D1_DATE", "").strip()
+
 # ── Хранилище состояния ──────────────────────────────────────────────────────
 STATE_PATH = os.environ.get("STATE_PATH", "data/state.json")

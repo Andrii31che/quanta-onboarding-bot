@@ -1029,3 +1029,81 @@ FAQ_LIST_PROMPT = {
     "uk": "Теми FAQ: {topics}\nНаприклад: `!faq оплата`",
     "en": "FAQ topics: {topics}\nFor example: `!faq payment`",
 }
+
+
+# ── Школа «Разгон»: /school-signup (спека U3/N4; анкета v2 — V 31.07) ─────────
+# Формула-обещание «2 недели до первого результата» обязательна при первом
+# упоминании школы (решение V 12.07). Расписание — плейбук: пн/ср/пт.
+
+SCHOOL_PROMPT = {
+    "ru": ("**Quanta School — программа «Разгон»: 2 недели до первого "
+           "результата.** Бесплатно · 6 живых занятий (пн/ср/пт) · Discord.\n"
+           "Что тебя привело в Quanta? Можно выбрать несколько — и жми "
+           "кнопку записи."),
+    "uk": ("**Quanta School — програма «Розгін»: 2 тижні до першого "
+           "результату.** Безкоштовно · 6 живих занять (пн/ср/пт) · Discord.\n"
+           "Що тебе привело в Quanta? Можна обрати кілька — і тисни "
+           "кнопку запису."),
+    "en": ("**Quanta School — the \"Razgon\" program: 2 weeks to your first "
+           "result.** Free · 6 live sessions (Mon/Wed/Fri) · Discord.\n"
+           "What brought you to Quanta? Pick one or more — then hit "
+           "the signup button."),
+}
+
+SCHOOL_SELECT_PLACEHOLDER = {
+    "ru": "Выбери цели…",
+    "uk": "Обери цілі…",
+    "en": "Pick your goals…",
+}
+
+SCHOOL_SUBMIT_LABEL = {
+    "ru": "🎓 Записаться",
+    "uk": "🎓 Записатися",
+    "en": "🎓 Sign up",
+}
+
+SCHOOL_PICK_FIRST = {
+    "ru": "Сначала выбери хотя бы одну цель в списке выше 🙂",
+    "uk": "Спершу обери хоча б одну ціль у списку вище 🙂",
+    "en": "Pick at least one goal in the list above first 🙂",
+}
+
+SCHOOL_CONFIRMED = {
+    "ru": ("Записал! Ты в наборе. **Д1 — {d1}**, занятия пн/ср/пт. "
+           "Канал набора: {ch_cohort} — расписание и материалы там. "
+           "Вход по ходу потока закрыт, так что ты вовремя 🚀"),
+    "uk": ("Записав! Ти в наборі. **Д1 — {d1}**, заняття пн/ср/пт. "
+           "Канал набору: {ch_cohort} — розклад і матеріали там. "
+           "Вхід по ходу потоку закритий, тож ти вчасно 🚀"),
+    "en": ("You're in! **Day 1 — {d1}**, sessions Mon/Wed/Fri. "
+           "Cohort channel: {ch_cohort} — schedule and materials live there. "
+           "Mid-cohort entry is closed, so you're right on time 🚀"),
+}
+
+SCHOOL_CLOSED = {
+    "ru": ("Поток уже идёт, а вход по ходу закрыт — так устроена программа. "
+           "Я записал тебя в лист ожидания: как только откроется следующий "
+           "набор, напишу лично."),
+    "uk": ("Потік уже йде, а вхід по ходу закритий — так влаштована програма. "
+           "Я записав тебе в лист очікування: щойно відкриється наступний "
+           "набір, напишу особисто."),
+    "en": ("The cohort is already running and mid-cohort entry is closed — "
+           "that's how the program works. I've put you on the waitlist: "
+           "I'll DM you as soon as the next cohort opens."),
+}
+
+SCHOOL_QID_DM = {
+    "ru": ("И последний шаг, чтобы закрепить место: привяжи аккаунт Quanta ID — "
+           "пришли ответом на это сообщение логин или почту из кабинета. "
+           "Нет кабинета? Возьми ссылку у того, кто тебя пригласил."),
+    "uk": ("І останній крок, щоб закріпити місце: прив'яжи акаунт Quanta ID — "
+           "надішли у відповідь на це повідомлення логін або пошту з кабінету. "
+           "Немає кабінету? Візьми посилання в того, хто тебе запросив."),
+    "en": ("One last step to lock your spot: link your Quanta ID — reply to "
+           "this message with the login or email from your dashboard. "
+           "No dashboard yet? Ask the person who invited you for their link."),
+}
+
+# Пост в служебный #заявки (сводка для спикера — цели потока)
+SCHOOL_POST = "🎓 Школа: {mention} (`{name}`, id {user_id}) записан · цели: {goals}"
+SCHOOL_WAITLIST_POST = "🎓 Школа: {mention} (`{name}`, id {user_id}) в листе ожидания · цели: {goals}"

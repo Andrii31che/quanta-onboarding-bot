@@ -113,6 +113,8 @@ intents.message_content = True  # privileged — команды !faq/!affiliate/
 # реакции входят в Intents.default()
 
 client = discord.Client(intents=intents)
+# Дерево слэш-команд (/school-signup); sync — в on_ready, guild-scoped.
+tree = discord.app_commands.CommandTree(client)
 
 
 # ── Хелперы по ролям/каналам (поиск по имени внутри гильдии) ──────────────────
@@ -686,6 +688,7 @@ async def ensure_support_pin(guild: discord.Guild) -> None:
 
 
 _views_registered = False
+_tree_synced = False
 
 
 @client.event
@@ -701,6 +704,21 @@ async def on_ready():
         client.add_view(FixView())
         if config.SUPPORT_INVITE_URL:
             client.add_view(SupportView(config.SUPPORT_INVITE_URL))
+    global _tree_synced
+    if not _tree_synced:
+        _tree_synced = True  # on_ready бывает и при reconnect — sync один раз
+        try:
+            if config.GUILD_ID:
+                gobj = discord.Object(id=config.GUILD_ID)
+                tree.copy_global_to(guild=gobj)
+                await tree.sync(guild=gobj)  # guild-scoped: в пикере сразу
+            else:
+                await tree.sync()
+            log.info("Слэш-команды синхронизированы: %s",
+                     [c.name for c in tree.get_commands()])
+        except discord.HTTPException as e:
+            _tree_synced = False
+            log.error("Sync слэш-команд не удался: %s", e)
     guild_now = main_guild()
     if guild_now is not None:
         await ensure_aux_roles(guild_now)
@@ -895,6 +913,104 @@ async def on_message(message: discord.Message):
 
 
 # ── 💰-заявка: Quanta ID из ЛС → пост в #заявки (спека §8, Phase 1) ───────────
+# ── Школа «Разгон»: /school-signup (спека U3/N4; анкета v2 — V 31.07) ────────
+# Анкета = 2 поля, ник известен из аккаунта — остаётся мультивыбор целей.
+# После отправки: @student + подтверждение (Д1, канал набора); набор закрыт →
+# лист ожидания (плейбук 6.4). Нет Q-ID → привязка через существующий
+# механизм pending_qid (ответ ловит maybe_capture_qid). Сводка целей — #заявки.
+
+def find_cohort_channel(guild: discord.Guild):
+    """Канал набора: имя из конфига, иначе последний по имени «школа-разгон*»."""
+    if config.SCHOOL_COHORT_CHANNEL:
+        return discord.utils.get(guild.text_channels, name=config.SCHOOL_COHORT_CHANNEL)
+    cands = [c for c in guild.text_channels if "школа-разгон" in c.name]
+    return sorted(cands, key=lambda c: c.name)[-1] if cands else None
+
+
+class SchoolSignupView(discord.ui.View):
+    """Эфемерная анкета: мультивыбор целей + кнопка записи (не persistent —
+    состояние выбора живёт в объекте, 10 минут на заполнение)."""
+
+    def __init__(self, lang: str):
+        super().__init__(timeout=600)
+        self.lang = lang
+        self.picked = []
+        self._select = discord.ui.Select(
+            placeholder=content.SCHOOL_SELECT_PLACEHOLDER[lang],
+            min_values=1, max_values=len(content.GOAL_LABEL),
+            options=[discord.SelectOption(label=content.GOAL_LABEL[g], value=g)
+                     for g in ("earn", "company", "business", "learn", "watch")])
+        self._select.callback = self._on_select
+        self.add_item(self._select)
+        submit = discord.ui.Button(label=content.SCHOOL_SUBMIT_LABEL[lang],
+                                   style=discord.ButtonStyle.primary)
+        submit.callback = self._on_submit
+        self.add_item(submit)
+
+    async def _on_select(self, interaction: discord.Interaction):
+        self.picked = list(self._select.values)
+        await interaction.response.defer()
+
+    async def _on_submit(self, interaction: discord.Interaction):
+        lang = self.lang
+        if not self.picked:
+            await interaction.response.send_message(
+                content.SCHOOL_PICK_FIRST[lang], ephemeral=True)
+            return
+        member = _member_of(interaction.user)
+        if member is None:
+            log.error("Школа: %s не найден в гильдии", interaction.user)
+            return
+        guild = member.guild
+        rec = user_record(member.id)
+        rec["school_goals"] = list(self.picked)
+        cohort_open = bool(config.SCHOOL_D1_DATE)
+        cohort = find_cohort_channel(guild)
+        ch_cohort = cohort.mention if cohort else "#школа-разгон"
+        if cohort_open:
+            rec["school_signed"] = True
+            await save_state()
+            await add_role_by_name(member, config.STUDENT_ROLE)
+            text = content.SCHOOL_CONFIRMED[lang].format(
+                d1=config.SCHOOL_D1_DATE, ch_cohort=ch_cohort)
+        else:
+            rec["school_waitlist"] = True
+            await save_state()
+            text = content.SCHOOL_CLOSED[lang]
+        # эфемерка исчезает из истории — дублируем итог в ЛС
+        await interaction.response.edit_message(content=text, view=None)
+        await dm(member, text)
+        # привязка Q-ID (этап 1): просим ID ответом в ЛС, ловит maybe_capture_qid
+        if not rec.get("qid"):
+            rec["pending_qid"] = True
+            await save_state()
+            await dm(member, content.SCHOOL_QID_DM[lang])
+        ch = discord.utils.get(guild.text_channels, name=config.APPLICATIONS_CHANNEL)
+        if ch is not None:
+            tpl = content.SCHOOL_POST if cohort_open else content.SCHOOL_WAITLIST_POST
+            labels = ", ".join(content.GOAL_LABEL[g] for g in self.picked)
+            try:
+                await ch.send(tpl.format(mention=member.mention, name=str(member),
+                                         user_id=member.id, goals=labels))
+            except discord.HTTPException as e:
+                log.error("Школа: пост в #%s не ушёл: %s",
+                          config.APPLICATIONS_CHANNEL, e)
+        else:
+            log.error("Школа: канал #%s не найден — сводка не доставлена",
+                      config.APPLICATIONS_CHANNEL)
+        log.info("Школа: %s → %s (цели: %s)", member,
+                 "запись" if cohort_open else "лист ожидания", self.picked)
+
+
+@tree.command(name="school-signup",
+              description="Записаться в школу «Разгон» — 2 недели до первого результата")
+async def school_signup(interaction: discord.Interaction):
+    member = _member_of(interaction.user)
+    lang = lang_of(member) if member else content.DEFAULT_LANG
+    await interaction.response.send_message(
+        content.SCHOOL_PROMPT[lang], view=SchoolSignupView(lang), ephemeral=True)
+
+
 async def maybe_capture_qid(message: discord.Message) -> None:
     rec = state.get(str(message.author.id))
     if not rec or not rec.get("pending_qid"):
